@@ -282,9 +282,14 @@ public abstract class NettyRemotingAbstract {
 
             responseTable.remove(opaque);
 
+
+            //异步消息InvokeCallback不为空
             if (responseFuture.getInvokeCallback() != null) {
+                //执行回调
                 executeInvokeCallback(responseFuture);
             } else {
+                //同步消息InvokeCallback为空
+                //唤醒阻塞的发送同步消息的producer线程
                 responseFuture.putResponse(cmd);
                 responseFuture.release();
             }
@@ -400,6 +405,7 @@ public abstract class NettyRemotingAbstract {
         final int opaque = request.getOpaque();
 
         try {
+            //每个消息对应一个 ResponseFuture
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis, null, null);
             this.responseTable.put(opaque, responseFuture);
             final SocketAddress addr = channel.remoteAddress();
@@ -420,7 +426,13 @@ public abstract class NettyRemotingAbstract {
                 }
             });
 
+
+            /**
+             * 阻塞等待response 基于countDownLatch实现
+             * NettyRemotingClient.NettyClientHandler#channelRead0() 当接受到broker的响应后 进行唤醒
+             */
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
+            //接受到响应后 解决阻塞
             if (null == responseCommand) {
                 if (responseFuture.isSendRequestOK()) {
                     throw new RemotingTimeoutException(RemotingHelper.parseSocketAddressAddr(addr), timeoutMillis,
@@ -441,6 +453,7 @@ public abstract class NettyRemotingAbstract {
         throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         long beginStartTime = System.currentTimeMillis();
         final int opaque = request.getOpaque();
+        //信号量 同时最多支持发送多少个异步消息 默认为65535
         boolean acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         if (acquired) {
             final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreAsync);
@@ -449,10 +462,16 @@ public abstract class NettyRemotingAbstract {
                 once.release();
                 throw new RemotingTimeoutException("invokeAsyncImpl call timeout");
             }
-
+            //封装回调方法（消息发送完成会进行回调）
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis - costTime, invokeCallback, once);
+
+            /**
+             *  保存回调方法 后续producer（netty client）接受到broker(netty server)的响应 会执行回调
+             *  NettyRemotingClient.NettyClientHandler#channelRead0() 中 处理 responseTable中的回调方法
+             */
             this.responseTable.put(opaque, responseFuture);
             try {
+                //通信基于netty
                 channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture f) throws Exception {
@@ -520,10 +539,12 @@ public abstract class NettyRemotingAbstract {
     public void invokeOnewayImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis)
         throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         request.markOnewayRPC();
+        // 信号量 同时最多支持发送多少个异步消息 默认为65535
         boolean acquired = this.semaphoreOneway.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         if (acquired) {
             final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreOneway);
             try {
+                //直接写
                 channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture f) throws Exception {

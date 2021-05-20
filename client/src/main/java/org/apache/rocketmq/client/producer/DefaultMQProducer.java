@@ -210,7 +210,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @param rpcHook RPC hook to execute per each remoting command execution.
      */
     public DefaultMQProducer(final String namespace, final String producerGroup, RPCHook rpcHook) {
+        //namespace：同一个java
         this.namespace = namespace;
+        //生产者组
         this.producerGroup = producerGroup;
         defaultMQProducerImpl = new DefaultMQProducerImpl(this, rpcHook);
     }
@@ -335,7 +337,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     public SendResult send(
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         Validators.checkMessage(msg, this);
+        //设置topic
         msg.setTopic(withNamespace(msg.getTopic()));
+        //发送消息
         return this.defaultMQProducerImpl.send(msg);
     }
 

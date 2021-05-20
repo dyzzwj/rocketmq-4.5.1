@@ -24,11 +24,24 @@ import org.apache.rocketmq.common.message.MessageQueue;
 
 public class MQFaultStrategy {
     private final static InternalLogger log = ClientLogger.getLog();
+    /**
+     * 延迟故障容错，维护每个Broker的发送消息的延迟
+     * key：brokerName
+     */
     private final LatencyFaultTolerance<String> latencyFaultTolerance = new LatencyFaultToleranceImpl();
 
+    /**
+      * 发送消息延迟容错开关
+     */
     private boolean sendLatencyFaultEnable = false;
 
+    /**
+     * 延迟级别数组
+     */
     private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
+    /**
+     * 不可用时长数组
+     */
     private long[] notAvailableDuration = {0L, 0L, 30000L, 60000L, 120000L, 180000L, 600000L};
 
     public long[] getNotAvailableDuration() {
@@ -55,24 +68,35 @@ public class MQFaultStrategy {
         this.sendLatencyFaultEnable = sendLatencyFaultEnable;
     }
 
+    /**
+     * 根据 Topic发布信息 选择一个消息队列
+     */
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
+        //是否支持容错 默认是false
         if (this.sendLatencyFaultEnable) {
             try {
+                //获取threadLocal中定义的index
                 int index = tpInfo.getSendWhichQueue().getAndIncrement();
                 for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
+                    // 轮训
                     int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
                     if (pos < 0)
                         pos = 0;
+                    //根据下标获取MessageQueue
                     MessageQueue mq = tpInfo.getMessageQueueList().get(pos);
+                    //判断当前的borker是否可用，如果可用的话，并且lastBrokerName为null(当for循环第一次发送时候lastBrokerName为null)
                     if (latencyFaultTolerance.isAvailable(mq.getBrokerName())) {
                         if (null == lastBrokerName || mq.getBrokerName().equals(lastBrokerName))
                             return mq;
                     }
                 }
+                //走到这一步，说明没有符合条件的broker，那么再取一个broker
 
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
+                //获取当前topic当前broker的写队列数量
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
                 if (writeQueueNums > 0) {
+                    //获取下一个mq队列,然后将对应的brokername还有队列id赋值
                     final MessageQueue mq = tpInfo.selectOneMessageQueue();
                     if (notBestBroker != null) {
                         mq.setBrokerName(notBestBroker);

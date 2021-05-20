@@ -74,6 +74,7 @@ public class ResponseFuture {
 
     public void putResponse(final RemotingCommand responseCommand) {
         this.responseCommand = responseCommand;
+        //唤醒阻塞的发送同步消息的producer
         this.countDownLatch.countDown();
     }
 

@@ -101,6 +101,15 @@ public class MQClientInstance {
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<String, TopicRouteData>();
     private final Lock lockNamesrv = new ReentrantLock();
     private final Lock lockHeartbeat = new ReentrantLock();
+    /**
+     *
+     *   broker映射信息
+     *   key -> brokerName：Master和Slave通过使用相同的Broker名称来表明相互关系，以说明某个Slave是哪个Master的Slave。
+     *   value -> map：包含master和slave的id和ip映射关系
+     *   broker-A     <0 - > 192.168.0.1>  master
+     *   broker-A     <1 - > 192.168.0.2>  slave
+     *  <brokername - > <brokerId - > ip>>
+     */
     private final ConcurrentMap<String/* Broker Name */, HashMap<Long/* brokerId */, String/* address */>> brokerAddrTable =
         new ConcurrentHashMap<String, HashMap<Long, String>>();
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable =
@@ -625,10 +634,12 @@ public class MQClientInstance {
                             }
                         }
                     } else {
+                        //从nameserver中获取他topic信息
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        //检查旧的topic信息和新的topic信息是否有变化
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
@@ -636,15 +647,21 @@ public class MQClientInstance {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
                         }
 
+                        //如果发生变化
                         if (changed) {
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
-
+                            //一个topic可以在分布在多个broker上
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
+                                /**
+                                 *  bd.getBrokerName(): broker-A
+                                 *  bd.getBrokerAddrs(): 0 -> 192.168.0.0 , 1 -> 192.168.0.1
+                                 */
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
 
                             // Update Pub info
                             {
+                                //根据TopicRouteData创建TopicPublishInfo
                                 TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
                                 publishInfo.setHaveTopicRouterInfo(true);
                                 Iterator<Entry<String, MQProducerInner>> it = this.producerTable.entrySet().iterator();
@@ -652,6 +669,7 @@ public class MQClientInstance {
                                     Entry<String, MQProducerInner> entry = it.next();
                                     MQProducerInner impl = entry.getValue();
                                     if (impl != null) {
+                                        //更新生产者的topic信息
                                         impl.updateTopicPublishInfo(topic, publishInfo);
                                     }
                                 }

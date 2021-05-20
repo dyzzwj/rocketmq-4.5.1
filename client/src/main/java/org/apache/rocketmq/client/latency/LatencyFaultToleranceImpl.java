@@ -76,6 +76,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
 
             Collections.sort(tmpList);
 
+            //选择顺序在前一半的
             final int half = tmpList.size() / 2;
             if (half <= 0) {
                 return tmpList.get(0).getName();
