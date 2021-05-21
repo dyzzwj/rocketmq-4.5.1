@@ -192,9 +192,12 @@ public class MappedFileQueue {
     }
 
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
+        //创建文件开始offset -1时 不创建
         long createOffset = -1;
+        //获取最后一个mappedfile
         MappedFile mappedFileLast = getLastMappedFile();
 
+        //一个映射文件都不存在
         if (mappedFileLast == null) {
             createOffset = startOffset - (startOffset % this.mappedFileSize);
         }
@@ -204,6 +207,7 @@ public class MappedFileQueue {
         }
 
         if (createOffset != -1 && needCreate) {
+            //需要创建文件
             String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);
             String nextNextFilePath = this.storePath + File.separator
                 + UtilAll.offset2FileName(createOffset + this.mappedFileSize);

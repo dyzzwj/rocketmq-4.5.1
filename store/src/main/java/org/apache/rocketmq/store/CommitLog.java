@@ -648,6 +648,7 @@ public class CommitLog {
 
         //磁盘刷新 （同步 异步）
         handleDiskFlush(result, putMessageResult, msg);
+        //文件同步
         handleHA(result, putMessageResult, msg);
 
         return putMessageResult;
@@ -683,6 +684,7 @@ public class CommitLog {
     }
 
     public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
+        //如果是同步master（当前节点是master 并且数据同步是同步模式） 同步到从节点（之后才能返回响应）
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
             if (messageExt.isWaitStoreMsgOK()) {
@@ -1176,19 +1178,40 @@ public class CommitLog {
         }
     }
 
+    /**
+     * 写入消息到buffer的默认实现
+     */
     class DefaultAppendMessageCallback implements AppendMessageCallback {
         // File at the end of the minimum fixed length empty
         private static final int END_FILE_MIN_BLANK_LENGTH = 4 + 4;
+        /**
+         * 存储在内存中的消息编号字节Buffer
+         */
         private final ByteBuffer msgIdMemory;
         // Store the message content
+        /**
+         * Store the message content
+         * 存储在内存中的消息字节Buffer
+         * 当消息传递到{@link #doAppend(long, ByteBuffer, int, MessageExtBrokerInner)}方法时，最终写到该参数
+         */
         private final ByteBuffer msgStoreItemMemory;
-        // The maximum length of the message
+        /**
+         * The maximum length of the message
+         * 消息最大长度
+         */
         private final int maxMessageSize;
-        // Build Message Key
+        /**
+         * Build Message Key
+         * {@link #topicQueueTable}的key
+         * 计算方式：topic + "-" + queueId
+         */
         private final StringBuilder keyBuilder = new StringBuilder();
 
         private final StringBuilder msgIdBuilder = new StringBuilder();
-
+        /**
+         * host字节buffer
+         * 用于重复计算host的字节内容
+         */
         private final ByteBuffer hostHolder = ByteBuffer.allocate(8);
 
         DefaultAppendMessageCallback(final int size) {
@@ -1201,6 +1224,7 @@ public class CommitLog {
             return msgStoreItemMemory;
         }
 
+
         public AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank,
             final MessageExtBrokerInner msgInner) {
             // STORETIMESTAMP + STOREHOSTADDRESS + OFFSET <br>
@@ -1208,7 +1232,9 @@ public class CommitLog {
             // PHY OFFSET
             long wroteOffset = fileFromOffset + byteBuffer.position();
 
+            //重置字节缓冲区
             this.resetByteBuffer(hostHolder, 8);
+            //计算commitLog里的msgId
             String msgId = MessageDecoder.createMessageId(this.msgIdMemory, msgInner.getStoreHostBytes(hostHolder), wroteOffset);
 
             // Record ConsumeQueue information
@@ -1244,8 +1270,10 @@ public class CommitLog {
             final byte[] propertiesData =
                 msgInner.getPropertiesString() == null ? null : msgInner.getPropertiesString().getBytes(MessageDecoder.CHARSET_UTF8);
 
+            //附加信息长度
             final int propertiesLength = propertiesData == null ? 0 : propertiesData.length;
 
+            //校验附加信息长度
             if (propertiesLength > Short.MAX_VALUE) {
                 log.warn("putMessage message properties length too long. length={}", propertiesData.length);
                 return new AppendMessageResult(AppendMessageStatus.PROPERTIES_SIZE_EXCEEDED);
@@ -1256,9 +1284,11 @@ public class CommitLog {
 
             final int bodyLength = msgInner.getBody() == null ? 0 : msgInner.getBody().length;
 
+            //消息长度
             final int msgLen = calMsgLength(bodyLength, topicLength, propertiesLength);
 
             // Exceeds the maximum message
+            //校验消息长度
             if (msgLen > this.maxMessageSize) {
                 CommitLog.log.warn("message size exceeded, msg total size: " + msgLen + ", msg body size: " + bodyLength
                     + ", maxMessageSize: " + this.maxMessageSize);
