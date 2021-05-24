@@ -29,6 +29,9 @@ public abstract class ServiceThread implements Runnable {
 
     private Thread thread;
     protected final CountDownLatch2 waitPoint = new CountDownLatch2(1);
+    /**
+     * 表示刷盘线程的状态
+     */
     protected volatile AtomicBoolean hasNotified = new AtomicBoolean(false);
     protected volatile boolean stopped = false;
     protected boolean isDaemon = false;
@@ -127,6 +130,7 @@ public abstract class ServiceThread implements Runnable {
     }
 
     protected void waitForRunning(long interval) {
+        //如果是唤醒状态（putRequest会修改状态），说明有任务待执行 就返回 执行commit()任务
         if (hasNotified.compareAndSet(true, false)) {
             this.onWaitEnd();
             return;
@@ -136,6 +140,7 @@ public abstract class ServiceThread implements Runnable {
         waitPoint.reset();
 
         try {
+            //阻塞
             waitPoint.await(interval, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             log.error("Interrupted", e);

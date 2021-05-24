@@ -269,6 +269,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
+     * 将内存中的数据永久的写入磁盘。刷写磁盘是直接调用MappedByteBuffer或FileChannel的force()将内存中的数据持久化到磁盘。
      * @return The current flushed position
      */
     public int flush(final int flushLeastPages) {
@@ -297,6 +298,10 @@ public class MappedFile extends ReferenceResource {
         return this.getFlushedPosition();
     }
 
+    /**
+     * commit的作用就是将writeBuffer 中的数据提交到FileChannel中
+     * commitLeastPages：本次提交最小的頁面
+     */
     public int commit(final int commitLeastPages) {
         if (writeBuffer == null) {
             //no need to commit data to file channel, so just regard wrotePosition as committedPosition.

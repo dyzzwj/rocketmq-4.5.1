@@ -443,6 +443,9 @@ public class MappedFileQueue {
         return result;
     }
 
+    /**
+     * commit的作用就是将writeBuffer 中的数据提交到FileChannel中
+     */
     public boolean commit(final int commitLeastPages) {
         boolean result = true;
         MappedFile mappedFile = this.findMappedFileByOffset(this.committedWhere, this.committedWhere == 0);
