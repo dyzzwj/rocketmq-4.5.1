@@ -38,7 +38,9 @@ import org.apache.rocketmq.remoting.netty.NettyServerConfig;
 import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
 import org.apache.rocketmq.srvutil.FileWatchService;
 
-
+/**
+ * 接受请求 进行响应
+ */
 public class NamesrvController {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
@@ -75,15 +77,24 @@ public class NamesrvController {
 
     public boolean initialize() {
 
+        //加载kv配置
         this.kvConfigManager.load();
 
+        /**
+         * 创建netty服务端
+         */
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
+
 
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
+        //将remotingExecutor注册到controller
         this.registerProcessor();
 
+        /**
+         * 定时任务 ：扫描不活跃的broker
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -92,6 +103,7 @@ public class NamesrvController {
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        //开启定时任务:每隔10min打印一次KV配置
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -153,6 +165,7 @@ public class NamesrvController {
     }
 
     public void start() throws Exception {
+        //启动netty服务端
         this.remotingServer.start();
 
         if (this.fileWatchService != null) {
