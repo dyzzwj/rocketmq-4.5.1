@@ -42,15 +42,32 @@ import org.apache.rocketmq.store.util.LibC;
 import sun.nio.ch.DirectBuffer;
 
 public class MappedFile extends ReferenceResource {
+    /**
+     * 内存页大小 linux下通过getconf PAGE_SIZE获取，一般默认是4k
+     */
     public static final int OS_PAGE_SIZE = 1024 * 4;
     protected static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    /**
+     * 所有MappedFile所有已使用字节总数
+     */
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);
 
+    /**
+     * MappedFile个数
+     */
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
+    /**
+     * MappedFile 当前文件所映射到的消息写入pagecache的位置
+     */
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
-    //ADD BY ChenYang
+    /**
+     * 已经提交(持久化)的位置
+     */
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
+    /**
+     * 来维持刷盘的最新位置
+     */
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
     protected int fileSize;
     protected FileChannel fileChannel;
@@ -60,10 +77,19 @@ public class MappedFile extends ReferenceResource {
     protected ByteBuffer writeBuffer = null;
     protected TransientStorePool transientStorePool = null;
     private String fileName;
+    /**
+     * 映射的起始偏移量，也是文件名
+     */
     private long fileFromOffset;
     private File file;
     private MappedByteBuffer mappedByteBuffer;
+    /**
+     * 文件最后一次写入时间
+     */
     private volatile long storeTimestamp = 0;
+    /**
+     * 是否是MappedFileQueue中的第一个文件
+     */
     private boolean firstCreateInQueue = false;
 
     public MappedFile() {
@@ -143,6 +169,12 @@ public class MappedFile extends ReferenceResource {
         return TOTAL_MAPPED_VIRTUAL_MEMORY.get();
     }
 
+    /**
+     * 如果设置transientStorePoolEnable为true则调用此方法，参见
+     *org.apache.rocketmq.store.config.MessageStoreConfig#isTransientStorePoolEnable()
+     * org.apache.rocketmq.store.AllocateMappedFileService#mmapOperation()
+     */
+
     public void init(final String fileName, final int fileSize,
         final TransientStorePool transientStorePool) throws IOException {
         init(fileName, fileSize);
@@ -150,6 +182,10 @@ public class MappedFile extends ReferenceResource {
         this.transientStorePool = transientStorePool;
     }
 
+    /**
+     * 如果设置transientStorePoolEnable为false则调用此方法，参见
+     * org.apache.rocketmq.store.AllocateMappedFileService#mmapOperation()
+     */
     private void init(final String fileName, final int fileSize) throws IOException {
         this.fileName = fileName;
         this.fileSize = fileSize;
