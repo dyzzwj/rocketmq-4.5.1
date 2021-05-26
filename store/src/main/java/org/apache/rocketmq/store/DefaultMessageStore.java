@@ -183,15 +183,18 @@ public class DefaultMessageStore implements MessageStore {
             }
 
             // load Commit Log
+            //加载commitLog（文件夹）
             result = result && this.commitLog.load();
 
             // load Consume Queue
+            //加载consumerQueue(文件夹)
             result = result && this.loadConsumeQueue();
 
             if (result) {
                 this.storeCheckpoint =
                     new StoreCheckpoint(StorePathConfigHelper.getStoreCheckpoint(this.messageStoreConfig.getStorePathRootDir()));
 
+                //加载index文件夹
                 this.indexService.load(lastExitOK);
 
                 this.recover(lastExitOK);

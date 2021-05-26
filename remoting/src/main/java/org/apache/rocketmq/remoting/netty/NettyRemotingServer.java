@@ -122,7 +122,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             });
 
             /**
-             * workerGroup
+             * 创建workerGroup
              */
             this.eventLoopGroupSelector = new EpollEventLoopGroup(nettyServerConfig.getServerSelectorThreads(), new ThreadFactory() {
                 private AtomicInteger threadIndex = new AtomicInteger(0);
