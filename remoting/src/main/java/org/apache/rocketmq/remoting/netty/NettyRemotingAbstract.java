@@ -114,7 +114,9 @@ public abstract class NettyRemotingAbstract {
      * @param permitsAsync Number of permits for asynchronous requests.
      */
     public NettyRemotingAbstract(final int permitsOneway, final int permitsAsync) {
+        //单向消息发送最大并发数
         this.semaphoreOneway = new Semaphore(permitsOneway, true);
+        //异步消息发送最大并发数
         this.semaphoreAsync = new Semaphore(permitsAsync, true);
     }
 
