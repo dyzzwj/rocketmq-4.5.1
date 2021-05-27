@@ -49,10 +49,33 @@ public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    /**
+     *  topic消息队列路由信息 消息发送时根据路由表进行负载均衡
+     *   k - topic
+     *   v - 一个topic可以在多个broker上
+     */
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    /**
+     *  broker基础信息 包括brokerName、所属集群名称、主备Broker地址
+     *  k - broker名称
+     *  v - 由相同brokerName的多台Broker组成Master-Slave架构
+     */
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+
+    /**
+     * Broker集群信息，存储集群中所有Broker名称
+     */
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    /**
+     *  Broker状态信息，NameServer每次收到心跳包是会替换该信息
+     *  k - broker地址
+     *  v - broker心跳信息
+     */
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+
+    /**
+     *  Broker上的FilterServer列表，用于类模式消息过滤。
+     */
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {
@@ -118,10 +141,14 @@ public class RouteInfoManager {
                     brokerNames = new HashSet<String>();
                     this.clusterAddrTable.put(clusterName, brokerNames);
                 }
+                //名称相同的brokerName的broker组成master-slave
                 brokerNames.add(brokerName);
 
                 boolean registerFirst = false;
 
+                /**
+                 * 根据brokername获取由相同brokerName的多台Broker组成Master-Slave信息
+                 */
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
                     registerFirst = true;
@@ -144,6 +171,7 @@ public class RouteInfoManager {
 
                 if (null != topicConfigWrapper
                     && MixAll.MASTER_ID == brokerId) {
+                    //如果该broker的topic信息有变化或是第一次注册的
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
                         || registerFirst) {
                         ConcurrentMap<String, TopicConfig> tcTable =
@@ -156,6 +184,7 @@ public class RouteInfoManager {
                     }
                 }
 
+                //更新broker 心跳信息
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
                         System.currentTimeMillis(),
@@ -173,13 +202,14 @@ public class RouteInfoManager {
                         this.filterServerTable.put(brokerAddr, filterServerList);
                     }
                 }
-
+                //slave
                 if (MixAll.MASTER_ID != brokerId) {
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {
                         BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.get(masterAddr);
                         if (brokerLiveInfo != null) {
                             result.setHaServerAddr(brokerLiveInfo.getHaServerAddr());
+                            //返回master信息给slave
                             result.setMasterAddr(masterAddr);
                         }
                     }
@@ -753,9 +783,22 @@ public class RouteInfoManager {
 }
 
 class BrokerLiveInfo {
+    /**
+     * 最近更新的一次时间戳
+     */
     private long lastUpdateTimestamp;
+    /**
+     * 数据版本
+     */
     private DataVersion dataVersion;
+
+    /***
+     *
+     */
     private Channel channel;
+    /**
+     *
+     */
     private String haServerAddr;
 
     public BrokerLiveInfo(long lastUpdateTimestamp, DataVersion dataVersion, Channel channel,
