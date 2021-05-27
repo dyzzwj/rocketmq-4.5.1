@@ -850,10 +850,14 @@ public class BrokerController {
     }
 
     public void start() throws Exception {
+        //启动消息存储
         if (this.messageStore != null) {
             this.messageStore.start();
         }
 
+        /**
+         * 启动netty server
+         */
         if (this.remotingServer != null) {
             this.remotingServer.start();
         }
@@ -866,6 +870,9 @@ public class BrokerController {
             this.fileWatchService.start();
         }
 
+        /**
+         * 启动netty客户端
+         */
         if (this.brokerOuterAPI != null) {
             this.brokerOuterAPI.start();
         }
@@ -958,6 +965,9 @@ public class BrokerController {
 
     private void doRegisterBrokerAll(boolean checkOrderConfig, boolean oneway,
         TopicConfigSerializeWrapper topicConfigWrapper) {
+        /**
+         * 将broker注册到nameserver
+         */
         List<RegisterBrokerResult> registerBrokerResultList = this.brokerOuterAPI.registerBrokerAll(
             this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
