@@ -225,6 +225,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                                 //NettyEncoder -> NettyDecoder -> IdleStateHandler -> NettyConnectManageHandler -> NettyServerHandler
                                 new NettyEncoder(),
                                 new NettyDecoder(),
+                                //心跳
                                 new IdleStateHandler(0, 0, nettyServerConfig.getServerChannelMaxIdleTimeSeconds()),
                                 new NettyConnectManageHandler(),
                                 new NettyServerHandler()
