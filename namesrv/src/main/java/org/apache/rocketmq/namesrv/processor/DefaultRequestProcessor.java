@@ -102,6 +102,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
                 if (brokerVersion.ordinal() >= MQVersion.Version.V3_0_11.ordinal()) {
                     return this.registerBrokerWithFilterServer(ctx, request);
                 } else {
+                    //注册
                     return this.registerBroker(ctx, request);
                 }
             case RequestCode.UNREGISTER_BROKER:
@@ -308,7 +309,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
         }
 
         /**
-         *  把broker上送的信息注册到RouteInfoManager
+         *  把broker上送的topic信息注册到RouteInfoManager   更新注册表信息
          */
         RegisterBrokerResult result = this.namesrvController.getRouteInfoManager().registerBroker(
             requestHeader.getClusterName(),
@@ -324,6 +325,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
         responseHeader.setHaServerAddr(result.getHaServerAddr());
         responseHeader.setMasterAddr(result.getMasterAddr());
 
+        //返回nameserver上的配置信息
         byte[] jsonValue = this.namesrvController.getKvConfigManager().getKVListByNamespace(NamesrvUtil.NAMESPACE_ORDER_TOPIC_CONFIG);
         response.setBody(jsonValue);
         response.setCode(ResponseCode.SUCCESS);

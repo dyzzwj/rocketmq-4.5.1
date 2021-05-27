@@ -134,6 +134,7 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
             case RequestCode.DELETE_TOPIC_IN_BROKER:
                 return this.deleteTopic(ctx, request);
             case RequestCode.GET_ALL_TOPIC_CONFIG:
+                //获取所有的topic信息
                 return this.getAllTopicConfig(ctx, request);
             case RequestCode.UPDATE_BROKER_CONFIG:
                 return this.updateBrokerConfig(ctx, request);
@@ -274,9 +275,11 @@ public class AdminBrokerProcessor implements NettyRequestProcessor {
         // final GetAllTopicConfigResponseHeader responseHeader =
         // (GetAllTopicConfigResponseHeader) response.readCustomHeader();
 
+        //对topic信息加密
         String content = this.brokerController.getTopicConfigManager().encode();
         if (content != null && content.length() > 0) {
             try {
+                //设置body
                 response.setBody(content.getBytes(MixAll.DEFAULT_CHARSET));
             } catch (UnsupportedEncodingException e) {
                 log.error("", e);

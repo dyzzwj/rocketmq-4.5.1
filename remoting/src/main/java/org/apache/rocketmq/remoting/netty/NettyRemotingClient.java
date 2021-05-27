@@ -161,6 +161,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             });
 
+        /**
+         * netty客户端引导类
+         */
         Bootstrap handler = this.bootstrap.group(this.eventLoopGroupWorker).channel(NioSocketChannel.class)
             .option(ChannelOption.TCP_NODELAY, true)
             .option(ChannelOption.SO_KEEPALIVE, false)
@@ -183,6 +186,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                         defaultEventExecutorGroup,
                         new NettyEncoder(),
                         new NettyDecoder(),
+                        //心跳handler
                         new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),
                         new NettyConnectManageHandler(),
                         new NettyClientHandler());

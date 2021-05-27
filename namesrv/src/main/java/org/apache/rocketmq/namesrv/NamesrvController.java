@@ -93,7 +93,7 @@ public class NamesrvController {
         this.registerProcessor();
 
         /**
-         * 定时任务 ：扫描不活跃的broker
+         * 定时任务 ：扫描不活跃的broker 每个10s执行一次
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 

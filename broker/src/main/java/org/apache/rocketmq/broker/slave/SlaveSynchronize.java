@@ -46,16 +46,28 @@ public class SlaveSynchronize {
     }
 
     public void syncAll() {
+        /**
+         * 同步topic信息
+         */
         this.syncTopicConfig();
+        /**
+         * 同步消费offset
+         */
         this.syncConsumerOffset();
+
         this.syncDelayOffset();
+        /**
+         *  同步订阅组配置
+         */
         this.syncSubscriptionGroupConfig();
     }
 
     private void syncTopicConfig() {
         String masterAddrBak = this.masterAddr;
+        //如果当前是slave
         if (masterAddrBak != null && !masterAddrBak.equals(brokerController.getBrokerAddr())) {
             try {
+                //向master查询topic配置
                 TopicConfigSerializeWrapper topicWrapper =
                     this.brokerController.getBrokerOuterAPI().getAllTopicConfig(masterAddrBak);
                 if (!this.brokerController.getTopicConfigManager().getDataVersion()
@@ -80,10 +92,13 @@ public class SlaveSynchronize {
         String masterAddrBak = this.masterAddr;
         if (masterAddrBak != null && !masterAddrBak.equals(brokerController.getBrokerAddr())) {
             try {
+                //向master发送请求
                 ConsumerOffsetSerializeWrapper offsetWrapper =
+
                     this.brokerController.getBrokerOuterAPI().getAllConsumerOffset(masterAddrBak);
                 this.brokerController.getConsumerOffsetManager().getOffsetTable()
                     .putAll(offsetWrapper.getOffsetTable());
+                //持久化消费offset
                 this.brokerController.getConsumerOffsetManager().persist();
                 log.info("Update slave consumer offset from master, {}", masterAddrBak);
             } catch (Exception e) {
@@ -120,6 +135,7 @@ public class SlaveSynchronize {
         String masterAddrBak = this.masterAddr;
         if (masterAddrBak != null  && !masterAddrBak.equals(brokerController.getBrokerAddr())) {
             try {
+                //查询订阅组信息
                 SubscriptionGroupWrapper subscriptionWrapper =
                     this.brokerController.getBrokerOuterAPI()
                         .getAllSubscriptionGroupConfig(masterAddrBak);
