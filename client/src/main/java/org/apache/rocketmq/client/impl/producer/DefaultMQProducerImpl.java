@@ -173,16 +173,21 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     public void start(final boolean startFactory) throws MQClientException {
+        //serviceState初始值为ServiceState.CREATE_JUST;
         switch (this.serviceState) {
             case CREATE_JUST:
+                //修改状态
                 this.serviceState = ServiceState.START_FAILED;
-
+                //检查生产者组
                 this.checkConfig();
 
+                //更改当前instanceName为进程id
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
 
+                //创建mq客户端实例
+                //整个JVM中只存在一个MQClientManager实例，维护一个MQClientInstance缓存表
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQProducer, rpcHook);
 
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
