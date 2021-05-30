@@ -56,8 +56,10 @@ public class PullMessageService extends ServiceThread {
         }
     }
 
+    //执行pull拉取消息请求
     public void executePullRequestImmediately(final PullRequest pullRequest) {
         try {
+            //添加到pull队列中
             this.pullRequestQueue.put(pullRequest);
         } catch (InterruptedException e) {
             log.error("executePullRequestImmediately pullRequestQueue.put", e);
@@ -77,14 +79,17 @@ public class PullMessageService extends ServiceThread {
     }
 
     private void pullMessage(final PullRequest pullRequest) {
+        //根据消费者组获取具体的消费对象
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
         if (consumer != null) {
             DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;
+            //拉取消息
             impl.pullMessage(pullRequest);
         } else {
             log.warn("No matched consumer for the PullRequest {}, drop it", pullRequest);
         }
     }
+
 
     @Override
     public void run() {
@@ -92,7 +97,9 @@ public class PullMessageService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
+                //从队列中获取拉取请求
                 PullRequest pullRequest = this.pullRequestQueue.take();
+                //执行拉取操作
                 this.pullMessage(pullRequest);
             } catch (InterruptedException ignored) {
             } catch (Exception e) {

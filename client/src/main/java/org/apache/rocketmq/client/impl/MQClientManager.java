@@ -45,10 +45,14 @@ public class MQClientManager {
     }
 
     public MQClientInstance getAndCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
+        //构建客户端id
         String clientId = clientConfig.buildMQClientId();
+        //根据客户端ID获取客户端实例
         MQClientInstance instance = this.factoryTable.get(clientId);
+        //没有就创建一个新的并缓存
         if (null == instance) {
             instance =
+                    //MQClientInstance封装了RocketMQ网络处理API，是消息生产者和消息消费者与NameServer、Broker打交道的网络通道
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
             MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);

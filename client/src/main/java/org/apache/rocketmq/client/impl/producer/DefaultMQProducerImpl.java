@@ -181,7 +181,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 //检查生产者组
                 this.checkConfig();
 
-                //更改当前instanceName为进程id
+                //如果是系统内置的producer，则更改该producer的instanceName为进程id
+                //如果一个JVM内用户启动了多个Producer，那么内置的producer是可以用一个的，所以这里将instanceName改成pid就好了，
+                // 那么在getAndCreateMQClientInstance中获取的clientId(ip@instanceName@unitName)就会一样，就能取出之前创建的MQClientInstance对象
+
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
@@ -190,6 +193,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 //整个JVM中只存在一个MQClientManager实例，维护一个MQClientInstance缓存表
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQProducer, rpcHook);
 
+                //注册当前生产者到到MQClientInstance管理中,方便后续调用网路请求
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
                 if (!registerOK) {
                     this.serviceState = ServiceState.CREATE_JUST;
@@ -200,6 +204,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
                 this.topicPublishInfoTable.put(this.defaultMQProducer.getCreateTopicKey(), new TopicPublishInfo());
 
+                //启动生产者
                 if (startFactory) {
                     mQClientFactory.start();
                 }

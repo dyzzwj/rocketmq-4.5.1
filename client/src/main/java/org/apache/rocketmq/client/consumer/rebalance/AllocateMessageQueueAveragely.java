@@ -32,6 +32,14 @@ public class AllocateMessageQueueAveragely implements AllocateMessageQueueStrate
     @Override
     public List<MessageQueue> allocate(String consumerGroup, String currentCID, List<MessageQueue> mqAll,
         List<String> cidAll) {
+        /**
+         *  consumerGroup:消费者组名
+         *  currentCID：当前客户端is
+         *  mqAll:某个topic对应的messagequeue
+         *  cidAll:消费者组下的客户端id
+         *
+         */
+
         if (currentCID == null || currentCID.length() < 1) {
             throw new IllegalArgumentException("currentCID is empty");
         }
@@ -52,12 +60,24 @@ public class AllocateMessageQueueAveragely implements AllocateMessageQueueStrate
         }
 
         int index = cidAll.indexOf(currentCID);
+        /**
+         * messagequeue的个数 模 消费者组下客户端的个数
+         */
+        //余数
         int mod = mqAll.size() % cidAll.size();
+
+        /**
+         *  计算每个客户端能分到的messagequeue
+         *  1、如果messagequeue的大小 < 客户端的大小 averageSize = 1
+         *  2、否则 如果余数 > 0 并且当前客户端id在客户端列表的顺序 > 余数 则当前客户端id分配到的messagequeue 为 商 + 1，如果客户端列表的顺序 < 余数 ，则分配到的messagequeue为商
+         *
+         */
         int averageSize =
             mqAll.size() <= cidAll.size() ? 1 : (mod > 0 && index < mod ? mqAll.size() / cidAll.size()
                 + 1 : mqAll.size() / cidAll.size());
         int startIndex = (mod > 0 && index < mod) ? index * averageSize : index * averageSize + mod;
         int range = Math.min(averageSize, mqAll.size() - startIndex);
+        //分配当前客户端应得的messagequeue
         for (int i = 0; i < range; i++) {
             result.add(mqAll.get((startIndex + i) % mqAll.size()));
         }

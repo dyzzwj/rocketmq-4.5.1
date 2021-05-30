@@ -53,7 +53,9 @@ public class RebalancePullImpl extends RebalanceImpl {
 
     @Override
     public boolean removeUnnecessaryMessageQueue(MessageQueue mq, ProcessQueue pq) {
+        //持久化消费者offset
         this.defaultMQPullConsumerImpl.getOffsetStore().persist(mq);
+        //
         this.defaultMQPullConsumerImpl.getOffsetStore().removeOffset(mq);
         return true;
     }

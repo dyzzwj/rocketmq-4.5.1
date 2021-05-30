@@ -45,6 +45,7 @@ public class ClientConfig {
     private int pollNameServerInterval = 1000 * 30;
     /**
      * Heartbeat interval in microseconds with message broker
+     *  微秒
      */
     private int heartbeatBrokerInterval = 1000 * 30;
     /**

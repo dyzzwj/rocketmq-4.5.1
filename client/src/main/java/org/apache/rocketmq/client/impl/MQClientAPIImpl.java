@@ -225,6 +225,7 @@ public class MQClientAPIImpl {
     }
 
     public void start() {
+        //netty客户端
         this.remotingClient.start();
     }
 
@@ -878,6 +879,7 @@ public class MQClientAPIImpl {
         final HeartbeatData heartbeatData,
         final long timeoutMillis
     ) throws RemotingException, MQBrokerException, InterruptedException {
+        //构造请求
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.HEART_BEAT, null);
         request.setLanguage(clientConfig.getLanguage());
         request.setBody(heartbeatData.encode());

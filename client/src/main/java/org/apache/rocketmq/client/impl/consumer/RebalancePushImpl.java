@@ -58,6 +58,7 @@ public class RebalancePushImpl extends RebalanceImpl {
         log.info("{} Rebalance changed, also update version: {}, {}", topic, subscriptionData.getSubVersion(), newVersion);
         subscriptionData.setSubVersion(newVersion);
 
+        //新订阅信息的版本为当前时间、更新pullThresholdForQueue和pullThresholdSizeForQueue
         int currentQueueCount = this.processQueueTable.size();
         if (currentQueueCount != 0) {
             int pullThresholdForTopic = this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getPullThresholdForTopic();
@@ -76,8 +77,7 @@ public class RebalancePushImpl extends RebalanceImpl {
                 this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().setPullThresholdSizeForQueue(newVal);
             }
         }
-
-        // notify broker
+        //通知所有的broker
         this.getmQClientFactory().sendHeartbeatToAllBrokerWithLock();
     }
 
@@ -140,44 +140,54 @@ public class RebalancePushImpl extends RebalanceImpl {
     @Override
     public long computePullFromWhere(MessageQueue mq) {
         long result = -1;
+        //获取消费点
         final ConsumeFromWhere consumeFromWhere = this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getConsumeFromWhere();
         final OffsetStore offsetStore = this.defaultMQPushConsumerImpl.getOffsetStore();
         switch (consumeFromWhere) {
             case CONSUME_FROM_LAST_OFFSET_AND_FROM_MIN_WHEN_BOOT_FIRST:
             case CONSUME_FROM_MIN_OFFSET:
             case CONSUME_FROM_MAX_OFFSET:
+                //从队列最新的偏移量开始消费
             case CONSUME_FROM_LAST_OFFSET: {
+                //从磁盘中获取消息的消费进度
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
+                //消费进度大于0 直接返回消费进度
                 if (lastOffset >= 0) {
                     result = lastOffset;
                 }
                 // First start,no offset
+                //消费者第一次启动 需要根据应用设置的消费点分情况讨论
                 else if (-1 == lastOffset) {
                     if (mq.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
                         result = 0L;
                     } else {
                         try {
+                            //获取该消息队列当前最大的偏移量
                             result = this.mQClientFactory.getMQAdminImpl().maxOffset(mq);
                         } catch (MQClientException e) {
                             result = -1;
                         }
                     }
                 } else {
+                    //表示该消息进度文件中存储了错误的偏移量，返回-1;
                     result = -1;
                 }
                 break;
             }
+            //从头开始消费
             case CONSUME_FROM_FIRST_OFFSET: {
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
                 if (lastOffset >= 0) {
                     result = lastOffset;
                 } else if (-1 == lastOffset) {
+                    //从头开始消费
                     result = 0L;
                 } else {
                     result = -1;
                 }
                 break;
             }
+            //从指定的时间开始消费
             case CONSUME_FROM_TIMESTAMP: {
                 long lastOffset = offsetStore.readOffset(mq, ReadOffsetType.READ_FROM_STORE);
                 if (lastOffset >= 0) {
@@ -193,6 +203,7 @@ public class RebalancePushImpl extends RebalanceImpl {
                         try {
                             long timestamp = UtilAll.parseDate(this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer().getConsumeTimestamp(),
                                 UtilAll.YYYYMMDDHHMMSS).getTime();
+                            //根据应用设置的时间调用searchOffset来查找偏移量
                             result = this.mQClientFactory.getMQAdminImpl().searchOffset(mq, timestamp);
                         } catch (MQClientException e) {
                             result = -1;
