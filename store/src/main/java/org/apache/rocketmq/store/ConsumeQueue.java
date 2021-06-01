@@ -32,6 +32,9 @@ public class ConsumeQueue {
 
     private final DefaultMessageStore defaultMessageStore;
 
+    /**
+     * 一个ConsumeQueue对应一个MappedFileQueue
+     */
     private final MappedFileQueue mappedFileQueue;
     private final String topic;
     private final int queueId;

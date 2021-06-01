@@ -77,6 +77,9 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      *
      * See {@linktourl http://rocketmq.apache.org/docs/core-concept/} for more discussion.
      */
+    /**
+     * 生产者所属组，消息服务器在回查事务状态时会随机选择该组中任何一 个生产者发起事务回查请求
+     */
     private String producerGroup;
 
     /**
@@ -86,16 +89,20 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Number of queues to create per default topic.
+     *
+     * 默认主题在没一个broker队列数量
      */
     private volatile int defaultTopicQueueNums = 4;
 
     /**
      * Timeout for sending messages.
+     * 发送消息默认超时时间
      */
     private int sendMsgTimeout = 3000;
 
     /**
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
+     * 消息体超过该值默认启用压缩 4k
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
 
@@ -104,6 +111,8 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     *
+     * 同步发送消息重试次数
      */
     private int retryTimesWhenSendFailed = 2;
 
@@ -112,11 +121,15 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     *
+     * 异步发送消息重试次数
      */
     private int retryTimesWhenSendAsyncFailed = 2;
 
     /**
      * Indicate whether to retry another broker on sending failure internally.
+     *
+     * 消息重试时选择另外一个 Broker时\ 是否不等待存储结果就返回 ， 默认为 false
      */
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 
@@ -338,6 +351,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     @Override
     public SendResult send(
         Message msg) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //同步发送消息
         Validators.checkMessage(msg, this);
         //设置topic
         msg.setTopic(withNamespace(msg.getTopic()));
@@ -380,6 +394,8 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @throws MQClientException if there is any client error.
      * @throws RemotingException if there is any network-tier error.
      * @throws InterruptedException if the sending thread is interrupted.
+     *
+     * 异步发送消息
      */
     @Override
     public void send(Message msg,

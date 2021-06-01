@@ -181,9 +181,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 //检查生产者组
                 this.checkConfig();
 
-                //如果是系统内置的producer，则更改该producer的instanceName为进程id
-                //如果一个JVM内用户启动了多个Producer，那么内置的producer是可以用一个的，所以这里将instanceName改成pid就好了，
-                // 那么在getAndCreateMQClientInstance中获取的clientId(ip@instanceName@unitName)就会一样，就能取出之前创建的MQClientInstance对象
+                //如果不是系统内置的producer，则更改该producer的instanceName为进程id
 
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
