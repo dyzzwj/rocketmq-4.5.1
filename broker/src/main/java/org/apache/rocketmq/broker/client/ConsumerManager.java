@@ -37,6 +37,9 @@ public class ConsumerManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final long CHANNEL_EXPIRED_TIMEOUT = 1000 * 120;
     /**
+     *
+     *  维护了消费者组订阅信息，以及消费者组下当前的消费者实例信息，
+     *  当消费者组的订阅信息或者实例发生变化，Broker都会主动给所有消费者实例发送通知，触发Rebalance
      *  k - 消费者组
      *  v - 消费者组信息
      */

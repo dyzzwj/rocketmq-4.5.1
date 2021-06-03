@@ -45,9 +45,10 @@ public class MQClientManager {
     }
 
     public MQClientInstance getAndCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
-        //构建客户端id
+        //构建客户端id 每个生产者和消费者都对应一个clientId
         String clientId = clientConfig.buildMQClientId();
         //根据客户端ID获取客户端实例
+        //每个生产者和消费者都对应一个client
         MQClientInstance instance = this.factoryTable.get(clientId);
         //没有就创建一个新的并缓存
         if (null == instance) {

@@ -41,7 +41,22 @@ import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 
 /**
- * Base class for rebalance algorithm
+ * Base class for rebalance
+ *
+ * 将一个Topic下的多个队列(或称之为分区)，在同一个消费者组(consumer group)下的多个消费者实例(consumer instance)之间进行重新分配
+ *
+ *  触发rebanlance :
+ *  1、订阅Topic的队列数量变化
+ *      broker宕机
+ *      broker升级等运维操作
+ *      队列扩容/缩容
+ *  2、消费者组信息变化
+ *     日常发布过程中的停止与启动
+       消费者异常宕机
+ *     网络异常导致消费者与Broker断开连接
+ *     主动进行消费者数量扩容/缩容
+ *     Topic订阅信息发生变化
+ *
  */
 public abstract class RebalanceImpl {
     protected static final InternalLogger log = ClientLogger.getLog();

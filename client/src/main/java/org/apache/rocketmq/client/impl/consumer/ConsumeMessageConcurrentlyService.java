@@ -86,6 +86,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
             @Override
             public void run() {
+                //清理过期消息
                 cleanExpireMsg();
             }
 

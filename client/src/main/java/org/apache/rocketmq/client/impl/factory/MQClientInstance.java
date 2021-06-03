@@ -246,6 +246,10 @@ public class MQClientInstance {
         return mqList;
     }
 
+    /**
+     * 生产者和消费者启动都会调用此方法
+     * @throws MQClientException
+     */
     public void start() throws MQClientException {
 
         synchronized (this) {
@@ -274,7 +278,7 @@ public class MQClientInstance {
                     this.startScheduledTask();
                     // Start pull service
                     /**
-                     * PullMessageService.run()
+                     * PullMessageService.run()   只有消费者会启动此任务 生产者不会启动
                      * 启动拉取消息的任务
                      */
                     this.pullMessageService.start();
@@ -965,7 +969,7 @@ public class MQClientInstance {
         if (null == group || null == consumer) {
             return false;
         }
-
+        //添加到consumerTable
         MQConsumerInner prev = this.consumerTable.putIfAbsent(group, consumer);
         if (prev != null) {
             log.warn("the consumer group[" + group + "] exist already.");
@@ -1192,6 +1196,7 @@ public class MQClientInstance {
     }
 
     public String findBrokerAddrByTopic(final String topic) {
+        //根据topic 因为在消费者启动的过程中会向所有的broker发送心跳信息，心跳信息中就包含注册的消费者
         TopicRouteData topicRouteData = this.topicRouteTable.get(topic);
         if (topicRouteData != null) {
             List<BrokerData> brokers = topicRouteData.getBrokerDatas();

@@ -40,11 +40,17 @@ import org.apache.rocketmq.common.protocol.body.KVTable;
 import org.apache.rocketmq.common.protocol.body.TopicConfigSerializeWrapper;
 import org.apache.rocketmq.common.sysflag.TopicSysFlag;
 
+
 public class TopicConfigManager extends ConfigManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final long LOCK_TIMEOUT_MILLIS = 3000;
     private transient final Lock lockTopicConfigTable = new ReentrantLock();
 
+    /**
+     * Map 的key是Topic名称，Value是TopicConfig。Broker通过实时的或者周期性的上报自己的Topic配置信息给NameServer，
+     * 在NameServer组装成Topic的完整路由信息。消费者定时向NameServer定时拉取最新路由信息，以实现间接通知，
+     * 当发现队列信息变化，触发Rebalance。
+     */
     private final ConcurrentMap<String, TopicConfig> topicConfigTable =
         new ConcurrentHashMap<String, TopicConfig>(1024);
     private final DataVersion dataVersion = new DataVersion();

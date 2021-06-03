@@ -59,6 +59,7 @@ public class ClientManageProcessor implements NettyRequestProcessor {
             case RequestCode.UNREGISTER_CLIENT:
                 return this.unregisterClient(ctx, request);
             case RequestCode.CHECK_CLIENT_CONFIG:
+                //检查客户端配置
                 return this.checkClientConfig(ctx, request);
             default:
                 break;
