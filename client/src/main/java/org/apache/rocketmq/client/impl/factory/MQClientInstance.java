@@ -524,6 +524,7 @@ public class MQClientInstance {
 
                 if (addr != null) {
                     try {
+                        //检查客户端配置
                         this.getMQClientAPIImpl().checkClientInBroker(
                             addr, entry.getKey(), this.clientId, subscriptionData, 3 * 1000
                         );
@@ -610,6 +611,7 @@ public class MQClientInstance {
     }
 
     private void sendHeartbeatToAllBroker() {
+        //准备心跳数据 包括生产者信息和消费者信息
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
         //当前jvm进程是否由生产者
         final boolean producerEmpty = heartbeatData.getProducerDataSet().isEmpty();
@@ -793,17 +795,20 @@ public class MQClientInstance {
         HeartbeatData heartbeatData = new HeartbeatData();
 
         // clientID
+        //设置客户端id
         heartbeatData.setClientID(this.clientId);
 
         // Consumer
+        //准备消费者信息
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
                 ConsumerData consumerData = new ConsumerData();
-                consumerData.setGroupName(impl.groupName());
-                consumerData.setConsumeType(impl.consumeType());
-                consumerData.setMessageModel(impl.messageModel());
-                consumerData.setConsumeFromWhere(impl.consumeFromWhere());
+                consumerData.setGroupName(impl.groupName());//消费者组名
+                consumerData.setConsumeType(impl.consumeType());//消费类型
+                consumerData.setMessageModel(impl.messageModel());//消费模式
+                consumerData.setConsumeFromWhere(impl.consumeFromWhere());//从什么位置开始消费
+                //设置订阅信息
                 consumerData.getSubscriptionDataSet().addAll(impl.subscriptions());
                 consumerData.setUnitMode(impl.isUnitMode());
 
@@ -812,6 +817,7 @@ public class MQClientInstance {
         }
 
         // Producer
+        //准备生产者信息
         for (Map.Entry<String/* group */, MQProducerInner> entry : this.producerTable.entrySet()) {
             MQProducerInner impl = entry.getValue();
             if (impl != null) {
@@ -1071,12 +1077,14 @@ public class MQClientInstance {
     }
 
     public void doRebalance() {
-        //遍历已经注册的消费者
+        //迭代当前机器每个consumer 进行reblance
+        System.out.println("消费者集合:" + this.consumerTable);
         for (Map.Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
             MQConsumerInner impl = entry.getValue();
             if (impl != null) {
                 try {
-                    //执行doRebalance
+                    // 执行每个消费者的的doRebalance
+                    // 执行doRebalance
                     impl.doRebalance();
                 } catch (Throwable e) {
                     log.error("doRebalance exception", e);

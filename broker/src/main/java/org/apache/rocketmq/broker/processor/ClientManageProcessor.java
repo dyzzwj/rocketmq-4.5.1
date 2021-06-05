@@ -55,6 +55,7 @@ public class ClientManageProcessor implements NettyRequestProcessor {
         throws RemotingCommandException {
         switch (request.getCode()) {
             case RequestCode.HEART_BEAT:
+                //处理心跳请求
                 return this.heartBeat(ctx, request);
             case RequestCode.UNREGISTER_CLIENT:
                 return this.unregisterClient(ctx, request);
@@ -73,6 +74,7 @@ public class ClientManageProcessor implements NettyRequestProcessor {
     }
 
     public RemotingCommand heartBeat(ChannelHandlerContext ctx, RemotingCommand request) {
+        //构建response
         RemotingCommand response = RemotingCommand.createResponseCommand(null);
         HeartbeatData heartbeatData = HeartbeatData.decode(request.getBody(), HeartbeatData.class);
         ClientChannelInfo clientChannelInfo = new ClientChannelInfo(
@@ -82,7 +84,9 @@ public class ClientManageProcessor implements NettyRequestProcessor {
             request.getVersion()
         );
 
+        //处理消费者信息
         for (ConsumerData data : heartbeatData.getConsumerDataSet()) {
+            //根据消费者组获取订阅信息
             SubscriptionGroupConfig subscriptionGroupConfig =
                 this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(
                     data.getGroupName());
@@ -100,6 +104,7 @@ public class ClientManageProcessor implements NettyRequestProcessor {
                     PermName.PERM_WRITE | PermName.PERM_READ, topicSysFlag);
             }
 
+            //注册消费者 -- 触发broker主动通知组内其他消费者进行reblance
             boolean changed = this.brokerController.getConsumerManager().registerConsumer(
                 data.getGroupName(),
                 clientChannelInfo,

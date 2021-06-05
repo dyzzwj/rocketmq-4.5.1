@@ -355,6 +355,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
         Set<SubscriptionData> result = new HashSet<SubscriptionData>();
 
         Set<String> topics = this.defaultMQPullConsumer.getRegisterTopics();
+        System.out.println("订阅的topic信息" + topics.toString());
         if (topics != null) {
             synchronized (topics) {
                 for (String t : topics) {
@@ -376,6 +377,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
     @Override
     public void doRebalance() {
         if (this.rebalanceImpl != null) {
+            //而pull模式，总是认为是无序的，因为写死了为false
             this.rebalanceImpl.doRebalance(false);
         }
     }
@@ -618,17 +620,23 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
 
     public synchronized void start() throws MQClientException {
         switch (this.serviceState) {
+            //初始状态CREATE_JUST
             case CREATE_JUST:
                 this.serviceState = ServiceState.START_FAILED;
 
+                //检查配置
+                //消费者组  订阅消息 listener 消费模式(广播、集群)
                 this.checkConfig();
 
+                //将订阅信息复制到RebanlanceImpl
                 this.copySubscription();
 
+                //如果是集群模式
                 if (this.defaultMQPullConsumer.getMessageModel() == MessageModel.CLUSTERING) {
                     this.defaultMQPullConsumer.changeInstanceNameToPID();
                 }
 
+                //获取或创建mqclient 每个消费者都对应一个client
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQPullConsumer, this.rpcHook);
 
                 this.rebalanceImpl.setConsumerGroup(this.defaultMQPullConsumer.getConsumerGroup());
@@ -646,9 +654,11 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
                 } else {
                     switch (this.defaultMQPullConsumer.getMessageModel()) {
                         case BROADCASTING:
+                            //广播 本地文件offset存储
                             this.offsetStore = new LocalFileOffsetStore(this.mQClientFactory, this.defaultMQPullConsumer.getConsumerGroup());
                             break;
                         case CLUSTERING:
+                            //集群模式 远程brokeroffset存储
                             this.offsetStore = new RemoteBrokerOffsetStore(this.mQClientFactory, this.defaultMQPullConsumer.getConsumerGroup());
                             break;
                         default:
@@ -668,6 +678,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
                         null);
                 }
 
+                //启动 生产者和消费者都会调用此方法
                 mQClientFactory.start();
                 log.info("the consumer [{}] start OK", this.defaultMQPullConsumer.getConsumerGroup());
                 this.serviceState = ServiceState.RUNNING;

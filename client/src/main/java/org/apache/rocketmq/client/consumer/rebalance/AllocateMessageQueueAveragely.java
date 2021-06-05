@@ -29,6 +29,15 @@ import org.apache.rocketmq.common.message.MessageQueue;
 public class AllocateMessageQueueAveragely implements AllocateMessageQueueStrategy {
     private final InternalLogger log = ClientLogger.getLog();
 
+
+    /**
+     * 平均分配，默认
+     * @param consumerGroup current consumer group
+     * @param currentCID current consumer id
+     * @param mqAll message queue set in current topic
+     * @param cidAll consumer set in current consumer group
+     * @return
+     */
     @Override
     public List<MessageQueue> allocate(String consumerGroup, String currentCID, List<MessageQueue> mqAll,
         List<String> cidAll) {
@@ -58,12 +67,12 @@ public class AllocateMessageQueueAveragely implements AllocateMessageQueueStrate
                 cidAll);
             return result;
         }
-
+        //计算自己在消费者列表中的位置
         int index = cidAll.indexOf(currentCID);
         /**
          * messagequeue的个数 模 消费者组下客户端的个数
          */
-        //余数
+        //计算平均分配后 多出来的数量 余数
         int mod = mqAll.size() % cidAll.size();
 
         /**
@@ -75,9 +84,13 @@ public class AllocateMessageQueueAveragely implements AllocateMessageQueueStrate
         int averageSize =
             mqAll.size() <= cidAll.size() ? 1 : (mod > 0 && index < mod ? mqAll.size() / cidAll.size()
                 + 1 : mqAll.size() / cidAll.size());
+        // //计算分配给自己的队列列表中的起始位置
         int startIndex = (mod > 0 && index < mod) ? index * averageSize : index * averageSize + mod;
+        // 计算range，即分配给自己几个队列。
+        // 由于计算出的averageSize最小为1，当队列数量是小于消费者数量，多出来的消费者应该分配为0，所
+        //以取(mqAll.size() - startIndex)
         int range = Math.min(averageSize, mqAll.size() - startIndex);
-        //分配当前客户端应得的messagequeue
+        ////从起始位置开始，循环range次，把对应的队列分配给自己  分配当前客户端应得的messagequeue
         for (int i = 0; i < range; i++) {
             result.add(mqAll.get((startIndex + i) % mqAll.size()));
         }

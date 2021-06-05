@@ -62,19 +62,25 @@ public class ClientRemotingProcessor implements NettyRequestProcessor {
     public RemotingCommand processRequest(ChannelHandlerContext ctx,
         RemotingCommand request) throws RemotingCommandException {
         switch (request.getCode()) {
+            //检查事务消息状态
             case RequestCode.CHECK_TRANSACTION_STATE:
                 return this.checkTransactionState(ctx, request);
             case RequestCode.NOTIFY_CONSUMER_IDS_CHANGED:
+                //处理消费者组实例信息或消费者组订阅信息发送变化的事件 触发rebalance
                 return this.notifyConsumerIdsChanged(ctx, request);
             case RequestCode.RESET_CONSUMER_CLIENT_OFFSET:
+                //重置消费者offset
                 return this.resetOffset(ctx, request);
             case RequestCode.GET_CONSUMER_STATUS_FROM_CLIENT:
+                //h获取消费者状态
                 return this.getConsumeStatus(ctx, request);
 
             case RequestCode.GET_CONSUMER_RUNNING_INFO:
+                //获取消费者运行信息
                 return this.getConsumerRunningInfo(ctx, request);
 
             case RequestCode.CONSUME_MESSAGE_DIRECTLY:
+                //直接消费消息
                 return this.consumeMessageDirectly(ctx, request);
             default:
                 break;
@@ -124,11 +130,13 @@ public class ClientRemotingProcessor implements NettyRequestProcessor {
     public RemotingCommand notifyConsumerIdsChanged(ChannelHandlerContext ctx,
         RemotingCommand request) throws RemotingCommandException {
         try {
+            //对broker的rebalance通知进行解码
             final NotifyConsumerIdsChangedRequestHeader requestHeader =
                 (NotifyConsumerIdsChangedRequestHeader) request.decodeCommandCustomHeader(NotifyConsumerIdsChangedRequestHeader.class);
             log.info("receive broker's notification[{}], the consumer group: {} changed, rebalance immediately",
                 RemotingHelper.parseChannelRemoteAddr(ctx.channel()),
                 requestHeader.getConsumerGroup());
+            //立即进行负载均衡
             this.mqClientFactory.rebalanceImmediately();
         } catch (Exception e) {
             log.error("notifyConsumerIdsChanged exception", RemotingHelper.exceptionSimpleDesc(e));

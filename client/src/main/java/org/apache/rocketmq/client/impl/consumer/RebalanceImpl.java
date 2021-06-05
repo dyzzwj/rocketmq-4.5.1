@@ -50,7 +50,7 @@ import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
  *      broker宕机
  *      broker升级等运维操作
  *      队列扩容/缩容
- *  2、消费者组信息变化
+ *  2、消费者组信息变化  -  2.1消费者组实例信息  2.2消费者组订阅信息（包括订阅的topic、过滤条件、消费类型（pull push）、消费模式、从什么位置开始消费）
  *     日常发布过程中的停止与启动
        消费者异常宕机
  *     网络异常导致消费者与Broker断开连接
@@ -253,6 +253,10 @@ public abstract class RebalanceImpl {
                 final String topic = entry.getKey();
                 try {
                     //根据topic负载均衡
+                    /**
+                     * RocketMQ按照Topic维度进行Rebalance，会导致一个很严重的结果：如果一个消费者组订阅多个Topic，可能会出现分配不均。
+                     * Kafka与RocketMQ不同，其是将组内订阅的所有Topic下的所有队列合并在一起，进行Rebalance。
+                     */
                     this.rebalanceByTopic(topic, isOrder);
                 } catch (Throwable e) {
                     if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
@@ -330,6 +334,22 @@ public abstract class RebalanceImpl {
                         /**
                          * 为当前客户端的消费者分配messagequeue 返回为当前客户端分配的消息队列  提供了多种分配策略(默认AllocateMessageQueueAveragely)
                          * 其结果存储在allocateResult并将其放在allocateResultSet中
+                         * 分配策略：
+                         *  AllocateMessageQueueAveragely：平均分配，默认
+                         * AllocateMessageQueueAveragelyByCircle：循环分配
+                         * AllocateMessageQueueConsistentHash：一致性哈希
+                         * AllocateMessageQueueByConfig：根据配置进行分配
+                         * AllocateMessageQueueByMachineRoom：根据机房
+                         * AllocateMachineRoomNearby：就近分配
+                         */
+
+                        /**
+                         * 消费者组下的多个实例 自己给自己分配d队列 如何保证分配结果的一致性？？
+                         * 1、在分配之前，需要对Topic下的多个队列进行排序，对多个消费者实例按照id进行排序
+                         *
+                         * 2、每个消费者需要使用相同的分配策略。
+                         *
+                         * 尽管每个消费者是各自给自己分配，但是因为使用的相同的分配策略，定位从队列列表中哪个位置开始给自己分配，给自己分配多少个队列，从而保证最终分配结果的一致。
                          */
                         allocateResult = strategy.allocate(
                             this.consumerGroup,
@@ -357,7 +377,7 @@ public abstract class RebalanceImpl {
                             "rebalanced result changed. allocateMessageQueueStrategyName={}, group={}, topic={}, clientId={}, mqAllSize={}, cidAllSize={}, rebalanceResultSize={}, rebalanceResultSet={}",
                             strategy.getName(), consumerGroup, topic, this.mQClientFactory.getClientId(), mqSet.size(), cidAll.size(),
                             allocateResultSet.size(), allocateResultSet);
-                        //如果rebalance结果发生变化
+                        //如果rebalance队列发生变化
                         this.messageQueueChanged(topic, mqSet, allocateResultSet);
                     }
                 }
@@ -407,6 +427,8 @@ public abstract class RebalanceImpl {
             //找属于该topic的messagequeue
             if (mq.getTopic().equals(topic)) {
                 /**
+                 * 对于移除的队列，要移除缓存的消息，并停止拉取消息，并持久化offset。
+                 *
                  * 如果新分配的messagequeue集合mqSet中不包含当前遍历的messagequeue
                  * 说明该messagequeue（之前属于当前消费者）被分配到其他消费者了
                  * 这种情况需要暂停消息队列的消费，将其对应ProcessQueue的dropped属性设置为true
@@ -442,6 +464,8 @@ public abstract class RebalanceImpl {
 
         List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
         /**
+         *
+         *  对于新增的队列，需要先计算从哪个位置开始消费，接着从这个位置开始拉取消息进行消费
          * 遍历新分配的集合mqSet 如果processQueueTable中不包含mq则说明该mq是本次新增加的
          *  这种情况下首先从内存中删除该mq的消费进度，然后从磁盘中读取该mq的消费进度并构建PullRequest
          */

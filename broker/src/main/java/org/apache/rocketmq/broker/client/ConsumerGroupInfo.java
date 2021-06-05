@@ -133,8 +133,10 @@ public class ConsumerGroupInfo {
         this.messageModel = messageModel;
         this.consumeFromWhere = consumeFromWhere;
 
+        //获取客户端channel配置
         ClientChannelInfo infoOld = this.channelInfoTable.get(infoNew.getChannel());
         if (null == infoOld) {
+            //如果为空 表名是新增的消费者
             ClientChannelInfo prev = this.channelInfoTable.put(infoNew.getChannel(), infoNew);
             if (null == prev) {
                 log.info("new consumer connected, group: {} {} {} channel: {}", this.groupName, consumeType,
@@ -144,6 +146,7 @@ public class ConsumerGroupInfo {
 
             infoOld = infoNew;
         } else {
+            //判断之前此客户端的客户端id和此次上报的客户端id是否相同
             if (!infoOld.getClientId().equals(infoNew.getClientId())) {
                 log.error("[BUG] consumer channel exist in broker, but clientId not equal. GROUP: {} OLD: {} NEW: {} ",
                     this.groupName,
@@ -162,11 +165,16 @@ public class ConsumerGroupInfo {
     public boolean updateSubscription(final Set<SubscriptionData> subList) {
         boolean updated = false;
 
+        //遍历订阅信息
         for (SubscriptionData sub : subList) {
+            //提供topic获取订阅信息
             SubscriptionData old = this.subscriptionTable.get(sub.getTopic());
             if (old == null) {
+                //如果上一次的订阅信息为空
+                //先保存订阅信息
                 SubscriptionData prev = this.subscriptionTable.putIfAbsent(sub.getTopic(), sub);
                 if (null == prev) {
+                    //表明是新增的topic
                     updated = true;
                     log.info("subscription changed, add new topic, group: {} {}",
                         this.groupName,
@@ -185,12 +193,15 @@ public class ConsumerGroupInfo {
             }
         }
 
+        //所有这个消费者组的topic的订阅信息 ?? 消费者发送心跳时上送的topic信息是否包含组内其他消费者订阅的topic而自己没有订阅
+
         Iterator<Entry<String, SubscriptionData>> it = this.subscriptionTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<String, SubscriptionData> next = it.next();
             String oldTopic = next.getKey();
 
             boolean exist = false;
+            //判断消费者是否订阅该topic
             for (SubscriptionData sub : subList) {
                 if (sub.getTopic().equals(oldTopic)) {
                     exist = true;
@@ -198,6 +209,7 @@ public class ConsumerGroupInfo {
                 }
             }
 
+            //如果没有订阅
             if (!exist) {
                 log.warn("subscription changed, group: {} remove topic {} {}",
                     this.groupName,

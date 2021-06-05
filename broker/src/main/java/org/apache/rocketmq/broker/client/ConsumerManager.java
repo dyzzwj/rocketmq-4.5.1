@@ -33,6 +33,16 @@ import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
+
+/**
+ * 1、数据添加：客户端通过发送HEART_BEAT请求给Broker，将自己添加到ConsumerManager中维护的某个消费者组中。
+ * 需要注意的是，每个ConsregisterConsumerumer都会向所有的Broker进行心跳，因此每个Broker都维护了所有消费者的信息。
+ *
+ * 2、数据删除：客户端正常停止时，发送UNREGISTER_CLIENT请求，将自己从ConsumerManager移除；
+ * 此外在发生网络异常时，Broker也会主动将消费者从ConsumerManager中移除。
+ *
+ * 3、数据查询：消费者可以向任意一个Broker发送GET_CONSUMER_LIST_BY_GROUP请求，来获得一个消费者组下的所有消费者实例信息
+ */
 public class ConsumerManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private static final long CHANNEL_EXPIRED_TIMEOUT = 1000 * 120;
@@ -107,6 +117,7 @@ public class ConsumerManager {
         ConsumeType consumeType, MessageModel messageModel, ConsumeFromWhere consumeFromWhere,
         final Set<SubscriptionData> subList, boolean isNotifyConsumerIdsChangedEnable) {
 
+        //根据消费者组获取消费组信息   如果没有 创建一个
         ConsumerGroupInfo consumerGroupInfo = this.consumerTable.get(group);
         if (null == consumerGroupInfo) {
             ConsumerGroupInfo tmp = new ConsumerGroupInfo(group, consumeType, messageModel, consumeFromWhere);
@@ -114,13 +125,19 @@ public class ConsumerManager {
             consumerGroupInfo = prev != null ? prev : tmp;
         }
 
+        //消费者组下实例是否发生变化
         boolean r1 =
             consumerGroupInfo.updateChannel(clientChannelInfo, consumeType, messageModel,
                 consumeFromWhere);
+        //消费者订阅信息是是否发生变化
         boolean r2 = consumerGroupInfo.updateSubscription(subList);
 
+        /**
+         *  如果消费者组实例信息或 消费者组订阅信息（包括订阅的topic、过滤条件、消费类型（pull push）、消费模式、从什么位置开始消费） 发生变化
+         */
         if (r1 || r2) {
             if (isNotifyConsumerIdsChangedEnable) {
+                //向所有消费者内的客户端发送change事件
                 this.consumerIdsChangeListener.handle(ConsumerGroupEvent.CHANGE, group, consumerGroupInfo.getAllChannel());
             }
         }

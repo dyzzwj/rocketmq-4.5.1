@@ -557,11 +557,25 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             case CREATE_JUST:
                 break;
             case RUNNING:
+                //停止正在消费的消息
                 this.consumeMessageService.shutdown();
+                //持久化消费offset
+                /**
+                 * 在停止时，会首先持久化offset，前文提到过默认情况下，offset是异步提交的，为了避免重复消费，
+                 * 因此在关闭时，必须要对尚未提交的offset进行持久化，其实就是发送UPDATE_CONSUMER_OFFSET请求给Broker，
+                 * Broker对应更新ConsumerOffsetManager中的记录。这样当队列分配给其他消费者时，就可以从这个位置继续开始消费。
+                 */
                 this.persistConsumerOffset();
+                //q取消注册
+                /**
+                 * 向所有broker发送UNREGISTER_CLIENT命令，取消注册Consumer。broker接收到这个命令后，
+                 * 将consumer从ConsumerManager中移除，然后通知这个消费者下的其他Consumer进行Rebalance。
+                 */
                 this.mQClientFactory.unregisterConsumer(this.defaultMQPushConsumer.getConsumerGroup());
+                //关闭与name server和broker的连接
                 this.mQClientFactory.shutdown();
                 log.info("the consumer [{}] shutdown OK", this.defaultMQPushConsumer.getConsumerGroup());
+                //丢弃尚未处理的消息
                 this.rebalanceImpl.destroy();
                 this.serviceState = ServiceState.SHUTDOWN_ALREADY;
                 break;
@@ -574,7 +588,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
     public synchronized void start() throws MQClientException {
         switch (this.serviceState) {
-            //出事状态CREATE_JUST
+            //初始状态CREATE_JUST
             case CREATE_JUST:
                 log.info("the consumer [{}] start beginning. messageModel={}, isUnitMode={}", this.defaultMQPushConsumer.getConsumerGroup(),
                     this.defaultMQPushConsumer.getMessageModel(), this.defaultMQPushConsumer.isUnitMode());
@@ -648,7 +662,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                         + "] has been created before, specify another name please." + FAQUrl.suggestTodo(FAQUrl.GROUP_NAME_DUPLICATE_URL),
                         null);
                 }
-
+                //生产者和消费者启动都会调用此方法
                 mQClientFactory.start();
                 log.info("the consumer [{}] start OK.", this.defaultMQPushConsumer.getConsumerGroup());
                 this.serviceState = ServiceState.RUNNING;
@@ -664,11 +678,12 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 break;
         }
 
-        //从nameserver拉起订阅信息
+        //从nameserver拉取订阅信息
         this.updateTopicSubscribeInfoWhenSubscriptionChanged();
 
+        //检查客户端配置
         this.mQClientFactory.checkClientInBroker();
-        //发送心跳
+        //发送心跳 由于是新增的consumer broker会主动通知组内其他消费者进行reblance
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
         //马上进行负载均衡
         this.mQClientFactory.rebalanceImmediately();
@@ -887,10 +902,12 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     }
 
     private void updateTopicSubscribeInfoWhenSubscriptionChanged() {
+        //获得当前Consumer所有的订阅信息
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
             for (final Map.Entry<String, SubscriptionData> entry : subTable.entrySet()) {
                 final String topic = entry.getKey();
+                //从nmameserver更新每个topic的路由信息
                 this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             }
         }
@@ -1034,6 +1051,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     @Override
     public void doRebalance() {
         if (!this.pause) {
+            //如果MessageListenerOrderly，则为true；否则为false
             this.rebalanceImpl.doRebalance(this.isConsumeOrderly());
         }
     }

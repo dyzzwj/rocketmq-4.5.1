@@ -87,9 +87,10 @@ public class Broker2Client {
             log.error("notifyConsumerIdsChanged consumerGroup is null");
             return;
         }
-
+        //构建请求头
         NotifyConsumerIdsChangedRequestHeader requestHeader = new NotifyConsumerIdsChangedRequestHeader();
         requestHeader.setConsumerGroup(consumerGroup);
+        //构建NOTIFY_CONSUMER_IDS_CHANGED请求
         RemotingCommand request =
             RemotingCommand.createRequestCommand(RequestCode.NOTIFY_CONSUMER_IDS_CHANGED, requestHeader);
 
