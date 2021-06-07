@@ -368,6 +368,9 @@ public class MQClientInstance {
             @Override
             public void run() {
                 try {
+                    /**
+                     * 消费进度持久化不仅仅只有定时持久化，拉取消息、分配消息队列等等操作，都会进行消费进度持久化
+                     */
                     MQClientInstance.this.persistAllConsumerOffset();
                 } catch (Exception e) {
                     log.error("ScheduledTask persistAllConsumerOffset exception", e);
@@ -1145,10 +1148,11 @@ public class MQClientInstance {
         final long brokerId,
         final boolean onlyThisBroker
     ) {
-        String brokerAddr = null;
-        boolean slave = false;
-        boolean found = false;
+        String brokerAddr = null;//broker地址
+        boolean slave = false;//是否是从节点
+        boolean found = false;//是否找到
 
+        //获得broker信息
         HashMap<Long/* brokerId */, String/* address */> map = this.brokerAddrTable.get(brokerName);
         if (map != null && !map.isEmpty()) {
             brokerAddr = map.get(brokerId);

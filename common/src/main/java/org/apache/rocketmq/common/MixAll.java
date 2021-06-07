@@ -144,6 +144,13 @@ public class MixAll {
         return 0;
     }
 
+    /**
+     * 将内容写到文件
+     *   安全写
+     *   1. 写到.tmp文件
+     *   2. 备份准备写入文件到.bak文件
+     *   3. 删除原文件，将.tmp修改成文件
+     */
     public static void string2File(final String str, final String fileName) throws IOException {
 
         String tmpFile = fileName + ".tmp";
@@ -186,6 +193,7 @@ public class MixAll {
         File file = new File(fileName);
         return file2String(file);
     }
+
 
     public static String file2String(final File file) throws IOException {
         if (file.exists()) {

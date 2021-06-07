@@ -31,6 +31,7 @@ public class DefaultMessageFilter implements MessageFilter {
 
     @Override
     public boolean isMatchedByConsumeQueue(Long tagsCode, ConsumeQueueExt.CqExtUnit cqExtUnit) {
+        //tagsCode或订阅数据
         if (null == tagsCode || null == subscriptionData) {
             return true;
         }
@@ -38,7 +39,7 @@ public class DefaultMessageFilter implements MessageFilter {
         if (subscriptionData.isClassFilterMode()) {
             return true;
         }
-
+        //订阅表达式全匹配 或 订阅数据code数组 是否包含 消息tagsCode
         return subscriptionData.getSubString().equals(SubscriptionData.SUB_ALL)
             || subscriptionData.getCodeSet().contains(tagsCode.intValue());
     }

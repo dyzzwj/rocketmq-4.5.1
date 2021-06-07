@@ -36,6 +36,8 @@ import org.apache.rocketmq.common.protocol.body.ProcessQueueInfo;
 
 /**
  * Queue consumption snapshot
+ *
+ * ProcessQueue是MessageQueue在消费端的快照
  */
 public class ProcessQueue {
     public final static long REBALANCE_LOCK_MAX_LIVE_TIME =
@@ -69,7 +71,7 @@ public class ProcessQueue {
      */
     private final AtomicLong tryUnlockTimes = new AtomicLong(0);
     /**
-     *     // ProcessQueue中保存的消息里的最大offset，为ConsumeQueue的offset
+     *     // ProcessQueue中保存的消息里的最大offset
      */
     private volatile long queueOffsetMax = 0L;
     /**
@@ -95,6 +97,14 @@ public class ProcessQueue {
     private volatile boolean consuming = false;
     /**
      *     // 该参数为调整线程池的时候提供了数据参考
+     *
+     *
+     * 23:  * Broker累计消息数量
+     * 24:  * 计算公式 = queueMaxOffset - 新添加消息数组[n - 1].queueOffset
+     * 25:  * Acc = Accumulation
+     * 26:  * cnt = （猜测）对比度
+     * 27:
+     *
      */
     private volatile long msgAccCnt = 0;
 
@@ -110,16 +120,19 @@ public class ProcessQueue {
      * @param pushConsumer
      */
     public void cleanExpiredMsg(DefaultMQPushConsumer pushConsumer) {
+
+        //顺序消费时 直接返回
         if (pushConsumer.getDefaultMQPushConsumerImpl().isConsumeOrderly()) {
             return;
         }
-
+        //循环移除消息 每次循环最多移除16条
         int loop = msgTreeMap.size() < 16 ? msgTreeMap.size() : 16;
         for (int i = 0; i < loop; i++) {
             MessageExt msg = null;
             try {
                 this.lockTreeMap.readLock().lockInterruptibly();
                 try {
+                    //获取第一条消息。判断是否超时，若不超时，则结束循环
                     if (!msgTreeMap.isEmpty() && System.currentTimeMillis() - Long.parseLong(MessageAccessor.getConsumeStartTimeStamp(msgTreeMap.firstEntry().getValue())) > pushConsumer.getConsumeTimeout() * 60 * 1000) {
                         msg = msgTreeMap.firstEntry().getValue();
                     } else {
@@ -134,12 +147,13 @@ public class ProcessQueue {
             }
 
             try {
-
+                //发回超时消息
                 pushConsumer.sendMessageBack(msg, 3);
                 log.info("send expire msg back. topic={}, msgId={}, storeHost={}, queueId={}, queueOffset={}", msg.getTopic(), msg.getMsgId(), msg.getStoreHost(), msg.getQueueId(), msg.getQueueOffset());
                 try {
                     this.lockTreeMap.writeLock().lockInterruptibly();
                     try {
+                        //判断此时消息是否依然是第一条，若是，则进行移除
                         if (!msgTreeMap.isEmpty() && msg.getQueueOffset() == msgTreeMap.firstKey()) {
                             try {
                                 removeMessage(Collections.singletonList(msg));
@@ -159,13 +173,23 @@ public class ProcessQueue {
         }
     }
 
+    /**
+     * 添加消息，并返回是否提交给消费者
+     * 返回true，当有新消息添加成功时，
+     * @param msgs
+     * @return
+     */
     public boolean putMessage(final List<MessageExt> msgs) {
         boolean dispatchToConsume = false;
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
             try {
+
+
                 int validMsgCnt = 0;
+                //添加消息
                 for (MessageExt msg : msgs) {
+                    // k - 消息的offset
                     MessageExt old = msgTreeMap.put(msg.getQueueOffset(), msg);
                     if (null == old) {
                         validMsgCnt++;
@@ -174,12 +198,13 @@ public class ProcessQueue {
                     }
                 }
                 msgCount.addAndGet(validMsgCnt);
-
+                //计算是否正在消费
                 if (!msgTreeMap.isEmpty() && !this.consuming) {
                     dispatchToConsume = true;
                     this.consuming = true;
                 }
 
+                //broker累计消息数量
                 if (!msgs.isEmpty()) {
                     MessageExt messageExt = msgs.get(msgs.size() - 1);
                     String property = messageExt.getProperty(MessageConst.PROPERTY_MAX_OFFSET);
@@ -217,6 +242,11 @@ public class ProcessQueue {
         return 0;
     }
 
+    /**
+     * 移除消息，并返回第一条消息队列位置
+     * @param msgs
+     * @return
+     */
     public long removeMessage(final List<MessageExt> msgs) {
         long result = -1;
         final long now = System.currentTimeMillis();
@@ -227,6 +257,7 @@ public class ProcessQueue {
                 if (!msgTreeMap.isEmpty()) {
                     result = this.queueOffsetMax + 1;
                     int removedCnt = 0;
+                    //循环移除消息
                     for (MessageExt msg : msgs) {
                         MessageExt prev = msgTreeMap.remove(msg.getQueueOffset());
                         if (prev != null) {

@@ -501,7 +501,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-        //将PullRequest放到PullMessageService中的pullRequestQueue并唤醒PullMessageService线程
+        //将PullRequest添加到pullRequestQueue，并唤醒PullMessageService线程
         this.dispatchPullRequest(pullRequestList);
 
         return changed;

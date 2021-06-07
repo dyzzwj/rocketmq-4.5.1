@@ -691,7 +691,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     public void start() throws MQClientException {
         //设置消费者组
         setConsumerGroup(NamespaceUtil.wrapNamespace(this.getNamespace(), this.consumerGroup));
-
+        //启动
         this.defaultMQPushConsumerImpl.start();
         if (null != traceDispatcher) {
             try {
@@ -752,6 +752,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      */
     @Override
     public void subscribe(String topic, String subExpression) throws MQClientException {
+        //订阅主题
         this.defaultMQPushConsumerImpl.subscribe(withNamespace(topic), subExpression);
     }
 

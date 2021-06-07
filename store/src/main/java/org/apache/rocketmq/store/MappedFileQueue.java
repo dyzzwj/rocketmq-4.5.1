@@ -39,6 +39,9 @@ public class MappedFileQueue {
 
     private final int mappedFileSize;
 
+    /**
+     * 一个MappedFileQueue包含多个MappedFile
+     */
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
     private final AllocateMappedFileService allocateMappedFileService;
