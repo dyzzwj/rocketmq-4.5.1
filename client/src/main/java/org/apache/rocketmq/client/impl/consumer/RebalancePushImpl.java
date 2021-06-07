@@ -81,13 +81,32 @@ public class RebalancePushImpl extends RebalanceImpl {
         this.getmQClientFactory().sendHeartbeatToAllBrokerWithLock();
     }
 
+    /*
+     * 移除不需要的队列相关的信息
+     * 1. 持久化消费进度，并移除之
+     * 2. 顺序消费&集群模式，解锁对该队列的锁定
+     *
+     * @param mq 消息队列
+     * @param pq 消息处理队列
+     * @return 是否移除成功
+     */
     @Override
     public boolean removeUnnecessaryMessageQueue(MessageQueue mq, ProcessQueue pq) {
+        //持久化offset
         this.defaultMQPushConsumerImpl.getOffsetStore().persist(mq);
+        //
         this.defaultMQPushConsumerImpl.getOffsetStore().removeOffset(mq);
+        /**
+         * 集群模式下 并且 是顺序消费 解除对队列的锁定
+         */
         if (this.defaultMQPushConsumerImpl.isConsumeOrderly()
             && MessageModel.CLUSTERING.equals(this.defaultMQPushConsumerImpl.messageModel())) {
             try {
+                /**
+                 * 获取消息队列消费锁，避免和消息队列消费冲突。
+                 * 如果获取锁失败，则移除消息队列失败，等待下次重新分配消费队列时，再进行移除。
+                 * 如果未获得锁而进行移除，则可能出现另外的 Consumer 和当前 Consumer 同时消费该消息队列，导致消息无法严格顺序消费。
+                 */
                 if (pq.getLockConsume().tryLock(1000, TimeUnit.MILLISECONDS)) {
                     try {
                         return this.unlockDelay(mq, pq);
@@ -112,8 +131,10 @@ public class RebalancePushImpl extends RebalanceImpl {
 
     private boolean unlockDelay(final MessageQueue mq, final ProcessQueue pq) {
 
+
         if (pq.hasTempMessage()) {
             log.info("[{}]unlockDelay, begin {} ", mq.hashCode(), mq);
+            //延迟移除
             this.defaultMQPushConsumerImpl.getmQClientFactory().getScheduledExecutorService().schedule(new Runnable() {
                 @Override
                 public void run() {
@@ -122,6 +143,10 @@ public class RebalancePushImpl extends RebalanceImpl {
                 }
             }, UNLOCK_DELAY_TIME_MILLS, TimeUnit.MILLISECONDS);
         } else {
+            /**
+             * 延迟解锁 Broker 消息队列锁
+             * 当消息处理队列不存在消息，则直接解锁
+             */
             this.unlock(mq, true);
         }
         return true;

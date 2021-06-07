@@ -48,6 +48,7 @@ public class ProcessQueue {
     private final ReadWriteLock lockTreeMap = new ReentrantReadWriteLock();
     /**
      * 用来保存拉取到的消息
+     *  key：消息队列位置
      */
     private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<Long, MessageExt>();
     /**
@@ -63,7 +64,9 @@ public class ProcessQueue {
      * A subset of msgTreeMap, will only be used when orderly consume
      */
     /**
-     *  顺序消费的时候使用
+     *  顺序消费的时候会把msgTreeMap里的消息放到consumingMsgOrderlyTreeMap
+     *  顺序消费从consumingMsgOrderlyTreeMap消费消息
+     *
      */
     private final TreeMap<Long, MessageExt> consumingMsgOrderlyTreeMap = new TreeMap<Long, MessageExt>();
     /**
@@ -86,6 +89,11 @@ public class ProcessQueue {
      *     // 上次消费完消息后记录的时间
      */
     private volatile long lastConsumeTimestamp = System.currentTimeMillis();
+
+
+    /**
+     * 当前processQueue对应的消息队列的分布式锁
+     */
     private volatile boolean locked = false;
     /**
      *     // 上次锁定的时间
@@ -313,6 +321,7 @@ public class ProcessQueue {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
             try {
+                //把consumingMsgOrderlyTreeMap的消息放回到msgTreeMap
                 this.msgTreeMap.putAll(this.consumingMsgOrderlyTreeMap);
                 this.consumingMsgOrderlyTreeMap.clear();
             } finally {
@@ -327,12 +336,16 @@ public class ProcessQueue {
         try {
             this.lockTreeMap.writeLock().lockInterruptibly();
             try {
+                //消费进度
                 Long offset = this.consumingMsgOrderlyTreeMap.lastKey();
                 msgCount.addAndGet(0 - this.consumingMsgOrderlyTreeMap.size());
                 for (MessageExt msg : this.consumingMsgOrderlyTreeMap.values()) {
+                    //重新计算消息大小
                     msgSize.addAndGet(0 - msg.getBody().length);
                 }
+                //清空
                 this.consumingMsgOrderlyTreeMap.clear();
+                //返回消费进度
                 if (offset != null) {
                     return offset + 1;
                 }
@@ -362,6 +375,12 @@ public class ProcessQueue {
         }
     }
 
+
+    /**
+     * 获得持有消息前batchSize条
+     * @param batchSize
+     * @return
+     */
     public List<MessageExt> takeMessags(final int batchSize) {
         List<MessageExt> result = new ArrayList<MessageExt>(batchSize);
         final long now = System.currentTimeMillis();
@@ -369,6 +388,8 @@ public class ProcessQueue {
             this.lockTreeMap.writeLock().lockInterruptibly();
             this.lastConsumeTimestamp = now;
             try {
+                //把msgTreeMap的前batchSize条消息放到consumingMsgOrderlyTreeMap
+                //同时删除msgTreeMap的前batchSize条消息
                 if (!this.msgTreeMap.isEmpty()) {
                     for (int i = 0; i < batchSize; i++) {
                         Map.Entry<Long, MessageExt> entry = this.msgTreeMap.pollFirstEntry();

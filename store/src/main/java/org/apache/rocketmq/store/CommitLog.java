@@ -69,9 +69,16 @@ public class CommitLog {
         this.defaultMessageStore = defaultMessageStore;
 
         if (FlushDiskType.SYNC_FLUSH == defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
+            /**
+             * 同步刷盘
+             */
             this.flushCommitLogService = new GroupCommitService();
         } else {
+            /**
+             * 异步刷盘
+             */
             this.flushCommitLogService = new FlushRealTimeService();
+
         }
 
         this.commitLogService = new CommitRealTimeService();
@@ -683,6 +690,9 @@ public class CommitLog {
         // Asynchronous flush
         //异步刷新
         else {
+            /**
+             * 是否开启内存字节缓冲区
+             */
             if (!this.defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
                 //唤醒刷盘线程
                 flushCommitLogService.wakeup();
@@ -930,7 +940,7 @@ public class CommitLog {
 
     /**
      * 实时 commit commitLog 线程服务
-     * 异步刷盘 && 开启内存字节缓冲区
+     * 异步刷盘 && 开启内存字节缓冲区 （异步 && StorePool）
      */
     class CommitRealTimeService extends FlushCommitLogService {
 
@@ -962,6 +972,10 @@ public class CommitLog {
                 }
 
                 try {
+
+                    /**
+                     * commit
+                     */
                     boolean result = CommitLog.this.mappedFileQueue.commit(commitDataLeastPages);
                     long end = System.currentTimeMillis();
                     if (!result) {
@@ -973,6 +987,7 @@ public class CommitLog {
                     if (end - begin > 500) {
                         log.info("Commit data to file costs {} ms", end - begin);
                     }
+                    //等待执行
                     this.waitForRunning(interval);
                 } catch (Throwable e) {
                     CommitLog.log.error(this.getServiceName() + " service has exception. ", e);
@@ -989,7 +1004,13 @@ public class CommitLog {
     }
 
     /**
+     *
+     *  	异步刷盘 && 关闭内存字节缓冲区
+     *
+     *
      * 实时 flush commitLog 线程服务
+     *  异步 && !StorePool
+     *
      */
     class FlushRealTimeService extends FlushCommitLogService {
         /**
@@ -1017,7 +1038,8 @@ public class CommitLog {
                 boolean printFlushProgress = false;
 
                 // 当时间满足flushPhysicQueueThoroughInterval时，即使写入的数量不足flushPhysicQueueLeastPages，也进行flush
-
+                //每 flushPhysicQueueThoroughInterval 周期，执行一次 flush 。因为不是每次循环到都能满足 flushCommitLogLeastPages 大小，
+                // 因此，需要一定周期进行一次强制 flush 。当然，不能每次循环都去执行强制 flush，这样性能较差
                 long currentTimeMillis = System.currentTimeMillis();
                 if (currentTimeMillis >= (this.lastFlushTimestamp + flushPhysicQueueThoroughInterval)) {
                     this.lastFlushTimestamp = currentTimeMillis;
@@ -1026,6 +1048,10 @@ public class CommitLog {
                 }
 
                 try {
+                    /**
+                     * 根据 flushCommitLogTimed 参数，可以选择每次循环是固定周期还是等待唤醒。
+                     * 默认配置是后者，所以，每次插入消息完成，会去调用 commitLogService.wakeup()
+                     */
                     if (flushCommitLogTimed) {
                         Thread.sleep(interval);
                     } else {
@@ -1055,6 +1081,9 @@ public class CommitLog {
             // Normal shutdown, to ensure that all the flush before exit
             boolean result = false;
             for (int i = 0; i < RETRY_TIMES_OVER && !result; i++) {
+                /**
+                 * flush
+                 */
                 result = CommitLog.this.mappedFileQueue.flush(0);
                 CommitLog.log.info(this.getServiceName() + " service shutdown, retry " + (i + 1) + " times " + (result ? "OK" : "Not OK"));
             }
@@ -1112,6 +1141,9 @@ public class CommitLog {
 
     /**
      * GroupCommit Service
+     *  同步刷盘
+     *
+     *
      */
     class GroupCommitService extends FlushCommitLogService {
         //写到内存的requestsWrite
@@ -1184,6 +1216,11 @@ public class CommitLog {
             //循环执行刷盘操作
             while (!this.isStopped()) {
                 try {
+                    /**
+                     * 每 10ms 执行一次批量提交。当然，如果 wakeup() 时，则会立即进行一次批量提交。
+                     * 当 Broker 设置成同步落盘 && 消息 isWaitStoreMsgOK=true，消息需要略大于 10ms 才能发送成功。
+                     * 当然，性能相对异步落盘较差，可靠性更高，需要我们在实际使用时去取舍
+                     */
                     //是否需要阻塞（是否有任务执行）
                     this.waitForRunning(10);
                     //刷盘
