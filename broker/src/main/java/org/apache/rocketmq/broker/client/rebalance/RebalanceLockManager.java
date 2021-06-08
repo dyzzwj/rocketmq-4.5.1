@@ -32,6 +32,10 @@ public class RebalanceLockManager {
     private final static long REBALANCE_LOCK_MAX_LIVE_TIME = Long.parseLong(System.getProperty(
         "rocketmq.broker.rebalance.lockMaxLiveTime", "60000"));
     private final Lock lock = new ReentrantLock();
+    /**
+     *  k - 消费者组
+     *  v - map ( k - 消息队列 v - 锁对象)
+     */
     private final ConcurrentMap<String/* group */, ConcurrentHashMap<MessageQueue, LockEntry>> mqLockTable =
         new ConcurrentHashMap<String, ConcurrentHashMap<MessageQueue, LockEntry>>(1024);
 
@@ -98,19 +102,21 @@ public class RebalanceLockManager {
     }
 
     private boolean isLocked(final String group, final MessageQueue mq, final String clientId) {
+        //根据消费者组获取组里的消费者对消息队列的加锁情况
         ConcurrentHashMap<MessageQueue, LockEntry> groupValue = this.mqLockTable.get(group);
         if (groupValue != null) {
+            //获取该消息队列的加锁情况
             LockEntry lockEntry = groupValue.get(mq);
-            if (lockEntry != null) {
+            if (lockEntry != null) {//加过锁
+                //判断加锁对象是不是当前client(消费者)  或 锁有没有过期（默认过期时间60s）
                 boolean locked = lockEntry.isLocked(clientId);
                 if (locked) {
                     lockEntry.setLastUpdateTimestamp(System.currentTimeMillis());
                 }
-
                 return locked;
             }
         }
-
+        //该消息队列没有加过锁（本次是第一次）
         return false;
     }
 
@@ -120,9 +126,15 @@ public class RebalanceLockManager {
         Set<MessageQueue> notLockedMqs = new HashSet<MessageQueue>(mqs.size());
 
         for (MessageQueue mq : mqs) {
+
             if (this.isLocked(group, mq, clientId)) {
+                //加锁成功
                 lockedMqs.add(mq);
             } else {
+                /**
+                 *  1、该消息队列没有加过锁（第一次加锁）
+                 *  2、加锁失败（持有锁的client不是当前client 或 锁过期）
+                 */
                 notLockedMqs.add(mq);
             }
         }
@@ -138,9 +150,14 @@ public class RebalanceLockManager {
                     }
 
                     for (MessageQueue mq : notLockedMqs) {
+
+                        /**
+                         * LockEntry用来表示持有锁的client
+                         */
                         LockEntry lockEntry = groupValue.get(mq);
-                        if (null == lockEntry) {
+                        if (null == lockEntry) {  // 处理第一次加锁的情况
                             lockEntry = new LockEntry();
+                            //设置持有锁的client
                             lockEntry.setClientId(clientId);
                             groupValue.put(mq, lockEntry);
                             log.info(
@@ -150,15 +167,24 @@ public class RebalanceLockManager {
                                 mq);
                         }
 
+
                         if (lockEntry.isLocked(clientId)) {
+                            /**
+                             * 如果是第一次加锁的情况 会进来
+                             */
                             lockEntry.setLastUpdateTimestamp(System.currentTimeMillis());
+                            //当前client获得该消息队列的锁
                             lockedMqs.add(mq);
                             continue;
                         }
 
+                        /**
+                         * 走到这 说明是加锁失败 即 持有锁的client不是当前client 或 锁过期
+                         */
                         String oldClientId = lockEntry.getClientId();
 
-                        if (lockEntry.isExpired()) {
+                        if (lockEntry.isExpired()) {  // 锁过期
+                            //当前client获得锁
                             lockEntry.setClientId(clientId);
                             lockEntry.setLastUpdateTimestamp(System.currentTimeMillis());
                             log.warn(
@@ -167,6 +193,7 @@ public class RebalanceLockManager {
                                 oldClientId,
                                 clientId,
                                 mq);
+                            //当前client获得该消息队列的锁
                             lockedMqs.add(mq);
                             continue;
                         }
@@ -256,6 +283,10 @@ public class RebalanceLockManager {
             return eq && !this.isExpired();
         }
 
+        /**
+         * true表示过期 false表示没有过期
+         * @return
+         */
         public boolean isExpired() {
             boolean expired =
                 (System.currentTimeMillis() - this.lastUpdateTimestamp) > REBALANCE_LOCK_MAX_LIVE_TIME;

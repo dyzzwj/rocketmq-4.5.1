@@ -218,11 +218,12 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 response.setRemark("topic[" + newTopic + "] not exist");
                 return response;
             }
-        } else {
+        } else { //延迟消息
             if (0 == delayLevel) {
                 delayLevel = 3 + msgExt.getReconsumeTimes();
             }
 
+            //重新设置延迟级别
             msgExt.setDelayTimeLevel(delayLevel);
         }
 
@@ -251,7 +252,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         if (putMessageResult != null) {
             switch (putMessageResult.getPutMessageStatus()) {
-                case PUTDefaultAppendMessageCallback_OK:
+                case PUT_OK:
                     String backTopic = msgExt.getTopic();
                     String correctTopic = msgExt.getProperty(MessageConst.PROPERTY_RETRY_TOPIC);
                     if (correctTopic != null) {

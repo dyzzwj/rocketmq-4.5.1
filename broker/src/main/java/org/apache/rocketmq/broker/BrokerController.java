@@ -240,6 +240,9 @@ public class BrokerController {
             try {
                 //消息存储
                 this.messageStore =
+                        /**
+                         *
+                         */
                     new DefaultMessageStore(this.messageStoreConfig, this.brokerStatsManager, this.messageArrivingListener,
                         this.brokerConfig);
 
@@ -854,6 +857,9 @@ public class BrokerController {
     public void start() throws Exception {
         //启动消息存储
         if (this.messageStore != null) {
+            /**
+             * 启动broker HA相关
+             */
             this.messageStore.start();
         }
 

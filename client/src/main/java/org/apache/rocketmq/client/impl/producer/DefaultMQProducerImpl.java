@@ -545,8 +545,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo != null && topicPublishInfo.ok()) {
             boolean callTimeout = false;
+            //最后选择消息要发送到的队列
             MessageQueue mq = null;
             Exception exception = null;
+            //最后一次发送结果
             SendResult sendResult = null;
             /**
              * 计算重试次数

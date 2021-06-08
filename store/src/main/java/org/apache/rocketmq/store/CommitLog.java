@@ -312,6 +312,7 @@ public class CommitLog {
             String keys = "";
             String uniqKey = null;
 
+
             short propertiesLength = byteBuffer.getShort();
             Map<String, String> propertiesMap = null;
             if (propertiesLength > 0) {
@@ -330,6 +331,7 @@ public class CommitLog {
 
                 // Timing message processing
                 {
+                    //延迟级别
                     String t = propertiesMap.get(MessageConst.PROPERTY_DELAY_TIME_LEVEL);
                     if (ScheduleMessageService.SCHEDULE_TOPIC.equals(topic) && t != null) {
                         int delayLevel = Integer.parseInt(t);
@@ -339,6 +341,7 @@ public class CommitLog {
                         }
 
                         if (delayLevel > 0) {
+                            //计算投递时间
                             tagsCode = this.defaultMessageStore.getScheduleMessageService().computeDeliverTimestamp(delayLevel,
                                 storeTimestamp);
                         }
@@ -567,9 +570,11 @@ public class CommitLog {
                 //存储消息时，延迟消息进入 `Topic` 为 `SCHEDULE_TOPIC_XXXX` 。
                 topic = ScheduleMessageService.SCHEDULE_TOPIC;
                 // 延迟级别 与 消息队列编号 做固定映射
+                //根据 延迟级别 计算 消息队列编号   QueueId = DelayLevel - 1
                 queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());
 
                 // Backup real topic, queueId
+                //备份真是的topic和queueId
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_TOPIC, msg.getTopic());
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_QUEUE_ID, String.valueOf(msg.getQueueId()));
                 msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
@@ -711,7 +716,9 @@ public class CommitLog {
                 if (service.isSlaveOK(result.getWroteOffset() + result.getWroteBytes())) {
                     GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
                     service.putRequest(request);
+                    //唤醒WriteSocketService
                     service.getWaitNotifyObject().wakeupAll();
+                    //等待slave给master上报同步到的commitLog最新的offset
                     boolean flushOK =
                         request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                     if (!flushOK) {
@@ -1130,6 +1137,7 @@ public class CommitLog {
         public boolean waitForFlush(long timeout) {
             try {
                 //等待   GroupCommitRequest被刷盘线程处理完后 会执行countDown()
+                // 或 Slave 收到数据后，立即上报最新的 CommitLog 同步进度到 Master
                 this.countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
                 return this.flushOK;
             } catch (InterruptedException e) {
@@ -1142,8 +1150,6 @@ public class CommitLog {
     /**
      * GroupCommit Service
      *  同步刷盘
-     *
-     *
      */
     class GroupCommitService extends FlushCommitLogService {
         //写到内存的requestsWrite

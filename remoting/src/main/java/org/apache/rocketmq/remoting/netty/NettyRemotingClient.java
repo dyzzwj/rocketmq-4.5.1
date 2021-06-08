@@ -368,6 +368,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
         long beginStartTime = System.currentTimeMillis();
+        //获取或创建channel
         final Channel channel = this.getAndCreateChannel(addr);
         if (channel != null && channel.isActive()) {
             try {
@@ -413,6 +414,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     }
 
     private Channel getAndCreateNameserverChannel() throws InterruptedException {
+        //返回可选择已连接的Nameserver
         String addr = this.namesrvAddrChoosed.get();
         if (addr != null) {
             ChannelWrapper cw = this.channelTables.get(addr);

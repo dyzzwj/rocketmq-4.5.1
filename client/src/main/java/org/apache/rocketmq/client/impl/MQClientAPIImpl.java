@@ -1002,6 +1002,7 @@ public class MQClientAPIImpl {
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.LOCK_BATCH_MQ, null);
         //设置请求体
         request.setBody(requestBody.encode());
+        //发请求
         RemotingCommand response = this.remotingClient.invokeSync(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr),
             request, timeoutMillis);
         switch (response.getCode()) {

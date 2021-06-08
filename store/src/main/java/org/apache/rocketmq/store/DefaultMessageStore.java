@@ -136,6 +136,10 @@ public class DefaultMessageStore implements MessageStore {
         this.storeStatsService = new StoreStatsService();
         this.indexService = new IndexService(this);
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
+            //默认进这里
+            /**
+             * broker HA相关
+             */
             this.haService = new HAService(this);
         } else {
             this.haService = null;
