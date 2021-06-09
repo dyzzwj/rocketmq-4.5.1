@@ -66,6 +66,8 @@ public class TransactionMQProducer extends DefaultMQProducer {
     /**
      * This method will be removed in the version 5.0.0, method <code>sendMessageInTransaction(Message,Object)</code>}
      * is recommended.
+     *  发送事务消息
+     *
      */
     @Override
     @Deprecated
@@ -75,7 +77,9 @@ public class TransactionMQProducer extends DefaultMQProducer {
             throw new MQClientException("localTransactionBranchCheckListener is null", null);
         }
 
+        //设置topic
         msg.setTopic(NamespaceUtil.wrapNamespace(this.getNamespace(), msg.getTopic()));
+        //发送事务消息
         return this.defaultMQProducerImpl.sendMessageInTransaction(msg, tranExecuter, arg);
     }
 

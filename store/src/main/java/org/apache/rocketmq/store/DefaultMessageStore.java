@@ -1561,13 +1561,13 @@ public class DefaultMessageStore implements MessageStore {
             //非事务消息 或 事务提交消息 建立 消息位置信息 到 ConsumeQueue
             final int tranType = MessageSysFlag.getTransactionValue(request.getSysFlag());
             switch (tranType) {
-                case MessageSysFlag.TRANSACTION_NOT_TYPE:
-                case MessageSysFlag.TRANSACTION_COMMIT_TYPE:
+                case MessageSysFlag.TRANSACTION_NOT_TYPE:  //非事务消息
+                case MessageSysFlag.TRANSACTION_COMMIT_TYPE: //事务消息COMMIT
                     //建立消息位置信息到consumeQueue
                     DefaultMessageStore.this.putMessagePositionInfo(request);
                     break;
-                case MessageSysFlag.TRANSACTION_PREPARED_TYPE:
-                case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE:
+                case MessageSysFlag.TRANSACTION_PREPARED_TYPE: //事务消息PREPARED
+                case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE: //事务消息ROLLBACK
                     break;
             }
         }
@@ -1863,7 +1863,9 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 写consumeQueue
+     * 写consumeQueue  存储消息在commitLog的索引
+     *  事务消息 提交(commit)后才生成consumeQueue
+     *
      */
     class ReputMessageService extends ServiceThread {
 
@@ -1871,6 +1873,8 @@ public class DefaultMessageStore implements MessageStore {
          * 开始重放消息的CommitLog的物理位置
          *  reputFromOffset不断指向下一条消息 生成ConsumerQueue和IndexFile对应的内容
          *  如果reputFromOffset指向BLANK，即文件末尾时，则指向下一个MappedFile
+         *
+         *
          *
          */
         private volatile long reputFromOffset = 0;
