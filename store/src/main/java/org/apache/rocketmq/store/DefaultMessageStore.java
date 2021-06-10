@@ -2017,6 +2017,7 @@ public class DefaultMessageStore implements MessageStore {
 
             while (!this.isStopped()) {
                 try {
+                    //1ms执行一次
                     Thread.sleep(1);
                     this.doReput();
                 } catch (Exception e) {

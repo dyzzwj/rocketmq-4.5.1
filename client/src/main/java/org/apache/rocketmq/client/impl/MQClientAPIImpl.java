@@ -387,13 +387,19 @@ public class MQClientAPIImpl {
         final SendMessageContext context,
         final DefaultMQProducerImpl producer
     ) throws InterruptedException, RemotingException {
+        //异步发送
         this.remotingClient.invokeAsync(addr, request, timeoutMillis, new InvokeCallback() {
             @Override
             public void operationComplete(ResponseFuture responseFuture) {
+                //先从Server端返回的responseFuture变量中获取RemotingCommand的值
                 RemotingCommand response = responseFuture.getResponseCommand();
                 if (null == sendCallback && response != null) {
 
                     try {
+                        //处理响应
+                        //Client端处理发送消息的Reponse返回（包括对消息返回体的头部进行解码，
+                        //取得“topic”、“BrokerName”、“QueueId”等值）
+                        //随后构建sendResult对象并设置Context上下文中
                         SendResult sendResult = MQClientAPIImpl.this.processSendResponse(brokerName, msg, response);
                         if (context != null && sendResult != null) {
                             context.setSendResult(sendResult);
@@ -408,6 +414,7 @@ public class MQClientAPIImpl {
 
                 if (response != null) {
                     try {
+
                         SendResult sendResult = MQClientAPIImpl.this.processSendResponse(brokerName, msg, response);
                         assert sendResult != null;
                         if (context != null) {
@@ -935,6 +942,7 @@ public class MQClientAPIImpl {
         final String remark,
         final long timeoutMillis
     ) throws RemotingException, MQBrokerException, InterruptedException {
+        //发送END_TRANSACTION请求
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.END_TRANSACTION, requestHeader);
 
         request.setRemark(remark);

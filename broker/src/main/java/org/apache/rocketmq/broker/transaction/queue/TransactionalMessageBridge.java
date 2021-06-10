@@ -187,16 +187,34 @@ public class TransactionalMessageBridge {
     }
 
     public PutMessageResult putHalfMessage(MessageExtBrokerInner messageInner) {
+
+        /**
+         *  parseHalfMessageInner：
+         * 半消息在存储前将存储的主题设置为RMQ_SYS_TRANS_HALF_TOPIC，将原来的Topic备份到属性中，
+         * 同时也备份了原来的QueueId。这也是为什么半消息不会被消费者消费的原因
+         */
         return store.putMessage(parseHalfMessageInner(messageInner));
     }
 
+
+    /**
+     * 半消息在存储前将存储的主题设置为RMQ_SYS_TRANS_HALF_TOPIC，将原来的Topic备份到属性中，
+     * 同时也备份了原来的QueueId。这也是为什么半消息不会被消费者消费的原因
+     * @param msgInner
+     * @return
+     */
     private MessageExtBrokerInner parseHalfMessageInner(MessageExtBrokerInner msgInner) {
+        //备份原主题
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_TOPIC, msgInner.getTopic());
+        //备份原topic
         MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_QUEUE_ID,
             String.valueOf(msgInner.getQueueId()));
+        //重置sysflag
         msgInner.setSysFlag(
             MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), MessageSysFlag.TRANSACTION_NOT_TYPE));
+        //主题变更 RMQ_SYS_TRANS_HALF_TOPIC
         msgInner.setTopic(TransactionalMessageUtil.buildHalfTopic());
+        //消息队列变更为0
         msgInner.setQueueId(0);
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
         return msgInner;
@@ -298,6 +316,7 @@ public class TransactionalMessageBridge {
      * @return This method will always return true.
      */
     private boolean addRemoveTagInTransactionOp(MessageExt messageExt, MessageQueue messageQueue) {
+        //主题变更为RMQ_SYS_TRANS_OP_HALF_TOPIC
         Message message = new Message(TransactionalMessageUtil.buildOpTopic(), TransactionalMessageUtil.REMOVETAG,
             String.valueOf(messageExt.getQueueOffset()).getBytes(TransactionalMessageUtil.charset));
         writeOp(message, messageQueue);

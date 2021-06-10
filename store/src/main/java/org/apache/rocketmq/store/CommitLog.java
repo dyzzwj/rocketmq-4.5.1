@@ -342,6 +342,9 @@ public class CommitLog {
 
                         if (delayLevel > 0) {
                             //计算投递时间
+                            /**
+                             * 如果 是延时消息 那么将tagsCode换成时间戳
+                             */
                             tagsCode = this.defaultMessageStore.getScheduleMessageService().computeDeliverTimestamp(delayLevel,
                                 storeTimestamp);
                         }
@@ -563,6 +566,7 @@ public class CommitLog {
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
             // Delay Delivery
             if (msg.getDelayTimeLevel() > 0) {
+                //如果设置的延迟级别大于broker端配置最大延迟级别则将该消息的延迟级别重置为broker端配置的最大延迟级别
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel()) {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService().getMaxDelayLevel());
                 }

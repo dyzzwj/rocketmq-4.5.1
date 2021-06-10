@@ -53,6 +53,7 @@ public class TransactionMQProducer extends DefaultMQProducer {
 
     @Override
     public void start() throws MQClientException {
+        //初始化事务环境
         this.defaultMQProducerImpl.initTransactionEnv();
         super.start();
     }

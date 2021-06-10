@@ -36,9 +36,14 @@ public class TransactionalMessageCheckService extends ServiceThread {
         return TransactionalMessageCheckService.class.getSimpleName();
     }
 
+
+    /**
+     * 事务回查每隔60秒执行一次，一次执行超时时间为6秒，最大回查次数为15次。
+     */
     @Override
     public void run() {
         log.info("Start transaction check service thread!");
+        //事件间隔为60s
         long checkInterval = brokerController.getBrokerConfig().getTransactionCheckInterval();
         while (!this.isStopped()) {
             this.waitForRunning(checkInterval);
@@ -48,7 +53,9 @@ public class TransactionalMessageCheckService extends ServiceThread {
 
     @Override
     protected void onWaitEnd() {
+        //默认6s
         long timeout = brokerController.getBrokerConfig().getTransactionTimeOut();
+        //z最大核查次数为15次
         int checkMax = brokerController.getBrokerConfig().getTransactionCheckMax();
         long begin = System.currentTimeMillis();
         log.info("Begin to check prepare message, begin time:{}", begin);

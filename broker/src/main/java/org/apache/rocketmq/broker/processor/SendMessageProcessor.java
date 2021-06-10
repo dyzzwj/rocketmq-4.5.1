@@ -203,7 +203,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             maxReconsumeTimes = requestHeader.getMaxReconsumeTimes();
         }
 
-        //如果超过最大消费次数，则topic修改成"%DLQ%" + 分组名，即加入 死信队列(Dead Letter Queue)
+        //如果超过最大重试次数，则topic修改成"%DLQ%" + 分组名，即加入 死信队列(Dead Letter Queue)
         if (msgExt.getReconsumeTimes() >= maxReconsumeTimes
             || delayLevel < 0) {
             newTopic = MixAll.getDLQTopic(requestHeader.getGroup());
@@ -218,8 +218,10 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 response.setRemark("topic[" + newTopic + "] not exist");
                 return response;
             }
-        } else { //延迟消息
+        } else {
+            //消息重试的间隔通过延迟消息实现
             if (0 == delayLevel) {
+                //通过重试次数设置延迟级别
                 delayLevel = 3 + msgExt.getReconsumeTimes();
             }
 
@@ -391,6 +393,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         String traFlag = oriProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
         //判断是否是事务消息
         if (traFlag != null && Boolean.parseBoolean(traFlag)) {
+            //可以通过配置是否接受事务消息存储
             if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {
                 //当前Broker是否支持broker
                 response.setCode(ResponseCode.NO_PERMISSION);
@@ -399,6 +402,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                         + "] sending transaction message is forbidden");
                 return response;
             }
+            /**
+             * PREPARE消息存储
+             */
             putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
         } else {
             //存储消息

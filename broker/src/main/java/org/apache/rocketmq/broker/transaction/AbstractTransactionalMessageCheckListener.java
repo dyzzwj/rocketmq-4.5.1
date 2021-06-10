@@ -76,6 +76,7 @@ public abstract class AbstractTransactionalMessageCheckListener {
             @Override
             public void run() {
                 try {
+                    //发送事务回查请求
                     sendCheckMessage(msgExt);
                 } catch (Exception e) {
                     LOGGER.error("Send check message error!", e);

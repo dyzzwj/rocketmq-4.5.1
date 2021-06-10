@@ -69,10 +69,22 @@ public class RemotingCommand {
         }
     }
 
+    /**
+     * 请求操作码，应答方根据不同的请求码进行不同的业务处理
+     * 应答响应码。0表示成功，非0则表示各种错误
+     *
+     */
     private int code;
     private LanguageCode language = LanguageCode.JAVA;
     private int version = 0;
+    /**
+     * 相当于reqeustId，在同一个连接上的不同请求标识码，与响应消息中的相对应
+     * 应答不做修改直接返回
+     */
     private int opaque = requestId.getAndIncrement();
+    /**
+     * 区分是普通RPC还是onewayRPC得标志
+     */
     private int flag = 0;
     private String remark;
     private HashMap<String, String> extFields;

@@ -37,12 +37,13 @@ public class ConsumeQueue {
      */
     private final MappedFileQueue mappedFileQueue;
     private final String topic;
+    //队列id
     private final int queueId;
-    private final ByteBuffer byteBufferIndex;
+    private final ByteBuffer byteBufferIndex; // 写索引时用到的ByteBuffer
 
     private final String storePath;
     private final int mappedFileSize;
-    private long maxPhysicOffset = -1;
+    private long maxPhysicOffset = -1; // 最后一个消息对应的物理Offset
     private volatile long minLogicOffset = 0;
     private ConsumeQueueExt consumeQueueExt = null;
 
