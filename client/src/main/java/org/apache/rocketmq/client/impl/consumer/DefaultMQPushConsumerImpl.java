@@ -229,7 +229,8 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         pullRequest.getProcessQueue().setLastPullTimestamp(System.currentTimeMillis());
 
         try {
-            //校验状态
+            //校验状态 判断消费者的状态是否正常，如果消费状态异常则将拉取任务pullRequest延迟3s再次放入到PullMessageService的拉取任务队列中
+            //        结束本次消息拉取
             this.makeSureStateOK();
         } catch (MQClientException e) {
             log.warn("pullMessage exception, consumer state not ok", e);
@@ -341,6 +342,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
                             long firstMsgOffset = Long.MAX_VALUE;
                             if (pullResult.getMsgFoundList() == null || pullResult.getMsgFoundList().isEmpty()) {
+                                //如果broker没有返回数据
                                 DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
                             } else {
                                 firstMsgOffset = pullResult.getMsgFoundList().get(0).getQueueOffset();
@@ -352,6 +354,10 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                                 //提交拉取到的消息到消息处理队列
                                 boolean dispatchToConsume = processQueue.putMessage(pullResult.getMsgFoundList());
                                 //提交消费请求
+                                /**
+                                 * 分为顺序消息和非顺序消息
+                                 * 将消息封装为线程任务提交到线程池 线程任务会回调consumer的listener方法
+                                 */
                                 DefaultMQPushConsumerImpl.this.consumeMessageService.submitConsumeRequest(
                                     pullResult.getMsgFoundList(),
                                     processQueue,
@@ -359,6 +365,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                                     dispatchToConsume);
 
                                 //提交下次拉取消息请求
+                                //如果pullInterval大于0，则将pullRequest延迟pullInterval毫秒后放入PullMessageService的pullRequestQueue队列中，这样形成持续拉取消息流程
                                 if (DefaultMQPushConsumerImpl.this.defaultMQPushConsumer.getPullInterval() > 0) {
                                     DefaultMQPushConsumerImpl.this.executePullRequestLater(pullRequest,
                                         DefaultMQPushConsumerImpl.this.defaultMQPushConsumer.getPullInterval());
@@ -467,7 +474,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             classFilter // class filter
         );
         try {
-            //执行拉取。如果拉取请求发生异常时，提交延迟拉取消息请求
+            /**
+             * 执行拉取。如果拉取请求发生异常时，提交延迟拉取消息请求
+             * 注：为消费者提供拉取消息服务的可以是master 也可以是slave
+             *
+             */
             this.pullAPIWrapper.pullKernelImpl(
                 pullRequest.getMessageQueue(),
                 subExpression,

@@ -58,30 +58,38 @@ public class MappedFile extends ReferenceResource {
      */
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
     /**
-     * MappedFile 当前文件所映射到的消息写入pagecache的位置
+     * MappedFile 当前文件所映射到的消息写入pagecache的位置   内存映射文件中的写指针
      */
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
     /**
-     * 已经提交(持久化)的位置
+     * 已经提交(持久化)的位置  内存映射文件的提交指针
      */
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
     /**
-     * 来维持刷盘的最新位置
+     * 来维持刷盘的最新位置 该位置之前的数据都持久化到磁盘中红
      */
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
     protected int fileSize;
+    //文件通道
     protected FileChannel fileChannel;
     /**
-     * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
+     *  堆外内存 如果不为空 数据首先存储在writebuffer中 然后提交到mappedfile对应的内存映射文件buffer
      */
     protected ByteBuffer writeBuffer = null;
+    /**
+     * 堆外内存池 该内存池中的内存会提供内存锁定机制
+     */
     protected TransientStorePool transientStorePool = null;
     private String fileName;
     /**
      * 映射的起始偏移量，也是文件名
      */
     private long fileFromOffset;
+    //物理文件
     private File file;
+    /**
+     * 物理文件对应的内存映射buffer
+     */
     private MappedByteBuffer mappedByteBuffer;
     /**
      * 文件最后一次写入时间
@@ -243,14 +251,15 @@ public class MappedFile extends ReferenceResource {
     public AppendMessageResult appendMessagesInner(final MessageExt messageExt, final AppendMessageCallback cb) {
         assert messageExt != null;
         assert cb != null;
-        //获取
+        //获取写指针位置
         int currentPos = this.wrotePosition.get();
-
+        //判断写指针位置与文件大小的关系
         if (currentPos < this.fileSize) {
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
             byteBuffer.position(currentPos);
             AppendMessageResult result = null;
             if (messageExt instanceof MessageExtBrokerInner) {
+                //普通消息
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBrokerInner) messageExt);
             } else if (messageExt instanceof MessageExtBatch) {
                 //批量

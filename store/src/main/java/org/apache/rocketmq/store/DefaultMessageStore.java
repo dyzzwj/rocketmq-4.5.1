@@ -518,7 +518,7 @@ public class DefaultMessageStore implements MessageStore {
         long beginTime = this.getSystemClock().now();
 
         GetMessageStatus status = GetMessageStatus.NO_MESSAGE_IN_QUEUE;
-        //查找x下一次队列偏移量
+        //查找下一次队列偏移量
         long nextBeginOffset = offset;
         long minOffset = 0;
         long maxOffset = 0;
@@ -526,7 +526,7 @@ public class DefaultMessageStore implements MessageStore {
         GetMessageResult getResult = new GetMessageResult();
         //当前commitLog最大偏移量
         final long maxOffsetPy = this.commitLog.getMaxOffset();
-        //根据topic和队列id查找队列
+        //根据topic和队列id查找consumequeue（消息索引）
         ConsumeQueue consumeQueue = findConsumeQueue(topic, queueId);
         if (consumeQueue != null) {
             //队列的最大偏移量
@@ -554,6 +554,7 @@ public class DefaultMessageStore implements MessageStore {
             } else {
                 //校验通过
                 //获得 映射Buffer结果(MappedFile)
+                //消息索引
                 SelectMappedBufferResult bufferConsumeQueue = consumeQueue.getIndexBuffer(offset);
                 if (bufferConsumeQueue != null) {
                     try {
@@ -1495,7 +1496,8 @@ public class DefaultMessageStore implements MessageStore {
      */
     public void doDispatch(DispatchRequest req) {
         for (CommitLogDispatcher dispatcher : this.dispatcherList) {
-            //CommitLogDispatcherBuildConsumeQueue
+            //CommitLogDispatcherBuildConsumeQueue：构建consumequeue文件
+            //CommitLogDispatcherBuildIndex.dispatch：构建index文件
             dispatcher.dispatch(req);
         }
     }
@@ -1871,11 +1873,9 @@ public class DefaultMessageStore implements MessageStore {
 
         /**
          * 开始重放消息的CommitLog的物理位置
+         * 指的是开始解析物理队列的位置，当其小于物理队列的最大位置时isCommitLogAvailable方法返回true，这个值在初始化的时候为0
          *  reputFromOffset不断指向下一条消息 生成ConsumerQueue和IndexFile对应的内容
          *  如果reputFromOffset指向BLANK，即文件末尾时，则指向下一个MappedFile
-         *
-         *
-         *
          */
         private volatile long reputFromOffset = 0;
 
@@ -1921,8 +1921,12 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         /**
-         * 1、不断生成消息位置信息到消费队列
-         * 2、不断生成消息索引到索引文件
+         *
+         *  1、在commitlog中获取从reputFromOffset（maxPhysicalPosInLogicQueue）开始的数据
+         *  2、遍历从commitlog中获取到的数据并构建DispatchRequest对象，最后通过doDispatch方法来构建consumequeue和index文件
+         *  3、在遍历的过程中每当一条数据构建consumequeue和index完成的同时会更新reputFromOffset，
+         *  当commitlog中一个mappedFile中的数据完成构建consumequeue和index的任务后会通过commitlog的rollNextFile方法来获取下一个mappedFile，
+         *  然后再遍历数据并构建DispatchRequest对象通过doDispatch方法构建consumequeue和index
          */
         private void doReput() {
             if (this.reputFromOffset < DefaultMessageStore.this.commitLog.getMinOffset()) {
@@ -1936,7 +1940,7 @@ public class DefaultMessageStore implements MessageStore {
                     && this.reputFromOffset >= DefaultMessageStore.this.getConfirmOffset()) {
                     break;
                 }
-                // 获取从reputFromOffset开始的commitLog对应的MappeFile对应的MappedByteBuffer
+                // 从commitLog中获取从reputFromOffset开始的commitLog对应的MappeFile对应的MappedByteBuffer
                 SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
                 if (result != null) {
                     try {
@@ -1952,7 +1956,9 @@ public class DefaultMessageStore implements MessageStore {
                             if (dispatchRequest.isSuccess()) {
                                 //读取成功
                                 if (size > 0) {
+                                    //构建consumequeue
                                     DefaultMessageStore.this.doDispatch(dispatchRequest);
+                                    //这个是长轮询相关，后续会分析
                                     //通知有新消息
                                     if (BrokerRole.SLAVE != DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole()
                                         && DefaultMessageStore.this.brokerConfig.isLongPollingEnable()) {
