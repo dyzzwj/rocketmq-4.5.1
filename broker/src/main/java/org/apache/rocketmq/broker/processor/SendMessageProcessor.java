@@ -192,7 +192,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             MessageAccessor.putProperty(msgExt, MessageConst.PROPERTY_RETRY_TOPIC, msgExt.getTopic());
         }
         // 设置消息不等待存储完成（独有） TODO 疑问：如果设置成不等待存储，broker设置成同步落盘，岂不是不能批量提交了？
-
+        //消息同步刷盘或异步刷盘会用到
         msgExt.setWaitStoreMsgOK(false);
 
         // 处理 delayLevel（独有）
@@ -204,11 +204,13 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         //如果超过最大重试次数，则topic修改成"%DLQ%" + 分组名，即加入 死信队列(Dead Letter Queue)
+        //如果消息的消费重试次数大于最大重新消费次数或则延迟级别小于0，修改消息的topic名称为%DLQ%，设置该主题的权限为只写，说明消息进入死信队列后将不再被消费
         if (msgExt.getReconsumeTimes() >= maxReconsumeTimes
             || delayLevel < 0) {
             newTopic = MixAll.getDLQTopic(requestHeader.getGroup());
             queueIdInt = Math.abs(this.random.nextInt() % 99999999) % DLQ_NUMS_PER_GROUP;
 
+            //设置该主题的权限为只写
             topicConfig = this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(newTopic,
                 DLQ_NUMS_PER_GROUP,
                 PermName.PERM_WRITE, 0
@@ -231,6 +233,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
         //创建MessageExtBrokerInner
         MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
+        //设置新的topic  为重试topic或死信队列
         msgInner.setTopic(newTopic);
         msgInner.setBody(msgExt.getBody());
         msgInner.setFlag(msgExt.getFlag());
@@ -251,6 +254,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
 
 
         // 添加消息
+        //将重试消息存入commitlog中时会将重试消息的topic和queueId备份到其扩展属性中，属性名称分别是REAL_TOPIC和REAL_QID，然后将其topic重置为SCHEDULE_TOPIC_XXXX，queueId重置为消息延迟级别减一
         PutMessageResult putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         if (putMessageResult != null) {
             switch (putMessageResult.getPutMessageStatus()) {
