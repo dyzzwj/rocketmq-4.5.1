@@ -37,12 +37,13 @@ public class ConsumeQueue {
      */
     private final MappedFileQueue mappedFileQueue;
     private final String topic;
+    //队列id
     private final int queueId;
-    private final ByteBuffer byteBufferIndex;
+    private final ByteBuffer byteBufferIndex; // 写索引时用到的ByteBuffer
 
     private final String storePath;
     private final int mappedFileSize;
-    private long maxPhysicOffset = -1;
+    private long maxPhysicOffset = -1; // 最后一个消息对应的物理Offset
     private volatile long minLogicOffset = 0;
     private ConsumeQueueExt consumeQueueExt = null;
 
@@ -440,15 +441,24 @@ public class ConsumeQueue {
             log.warn("Maybe try to build consume queue repeatedly maxPhysicOffset={} phyOffset={}", maxPhysicOffset, offset);
             return true;
         }
-        //写入位置信息到bytebuffer
+        //写入ConsumeQueue的临时ByteBuffer
         this.byteBufferIndex.flip();
+        //consumequeue的大小为20
         this.byteBufferIndex.limit(CQ_STORE_UNIT_SIZE);
+        //offset：消息commitLog存储位置
         this.byteBufferIndex.putLong(offset);
+        //消息长度
         this.byteBufferIndex.putInt(size);
+        //消息tagscode
         this.byteBufferIndex.putLong(tagsCode);
+        /**
+         * cqOffset：topic+queueId下的消息个数-1，所以，计算ConsumeQueue的物理位移的时候是=个数*大小
+         */
         //计算consumeQueue存储位置，并获得对应的MappedFile
+        //物理位移 = 消息数 * 每个consumequeue的大小
         final long expectLogicOffset = cqOffset * CQ_STORE_UNIT_SIZE;
-
+        //获取ConsumeQueue对应的MapedFile，没有则创建
+        // 以前介绍过MapedFile是对文件的操作的封装，其对应一个磁盘上的ConsumeQueue文件
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile(expectLogicOffset);
         if (mappedFile != null) {
             // 当是ConsumeQueue第一个MappedFile && 队列位置非第一个 && MappedFile未写入内容，则填充前置空白占位
@@ -467,7 +477,7 @@ public class ConsumeQueue {
             //  校验consumeQueue存储位置是否合法。TODO 如果不合法，继续写入会不会有问题？
             if (cqOffset != 0) {
                 long currentLogicOffset = mappedFile.getWrotePosition() + mappedFile.getFileFromOffset();
-
+                //校验offset
                 if (expectLogicOffset < currentLogicOffset) {
                     log.warn("Build  consume queue repeatedly, expectLogicOffset: {} currentLogicOffset: {} Topic: {} QID: {} Diff: {}",
                         expectLogicOffset, currentLogicOffset, this.topic, this.queueId, expectLogicOffset - currentLogicOffset);
@@ -485,9 +495,9 @@ public class ConsumeQueue {
                     );
                 }
             }
-            //设置commitLog重放消息到ConsumeQueue位置。
+            // 每次构建ConsumeQueue,该值设置为CommitLog的offset。
             this.maxPhysicOffset = offset + size;
-            //插入mappedFile
+            // 写入ConsumeQueue文件对应的ByteBuffer中
             return mappedFile.appendMessage(this.byteBufferIndex.array());
         }
         return false;

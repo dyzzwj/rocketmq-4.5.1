@@ -199,12 +199,16 @@ public class IndexService {
     }
 
     public void buildIndex(DispatchRequest req) {
+        //获取最后一个index文件
         IndexFile indexFile = retryGetAndCreateIndexFile();
         if (indexFile != null) {
+            //获取index文件中包含消息的最大物理偏移量
             long endPhyOffset = indexFile.getEndPhyOffset();
             DispatchRequest msg = req;
+            //从DispatchRequest中获取消息的topic和key
             String topic = msg.getTopic();
             String keys = msg.getKeys();
+            //判断待构建index的消息的commitlog offset是否小于index文件中包含消息的最大物理偏移量，如果是则表示该消息已经构建了index直接返回即可
             if (msg.getCommitLogOffset() < endPhyOffset) {
                 return;
             }
@@ -219,6 +223,10 @@ public class IndexService {
                     return;
             }
 
+            /**
+             * 如果消息的UniqKey不为null，则先根据消息的topic和UniqKey构建出形如“topic # key”的index key，
+             * 然后使用putKey方法构建index信息，该方法的核心实现是putKey(final String key, final long phyOffset, final long storeTimestamp)
+             */
             if (req.getUniqKey() != null) {
                 indexFile = putKey(indexFile, msg, buildKey(topic, req.getUniqKey()));
                 if (indexFile == null) {
@@ -226,7 +234,9 @@ public class IndexService {
                     return;
                 }
             }
-
+            /**
+             * RocketMQ中支持为同一条消息构建多个索引，所以如果该消息中包含多个key则会为该消息创建对应数量的索引
+             */
             if (keys != null && keys.length() > 0) {
                 String[] keyset = keys.split(MessageConst.KEY_SEPARATOR);
                 for (int i = 0; i < keyset.length; i++) {

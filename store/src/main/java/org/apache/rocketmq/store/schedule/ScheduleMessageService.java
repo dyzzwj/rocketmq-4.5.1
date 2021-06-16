@@ -129,7 +129,7 @@ public class ScheduleMessageService extends ConfigManager {
                 if (null == offset) {
                     offset = 0L;
                 }
-
+                //16个延时级别，每个级别都有个定时器去扫描消息
                 if (timeDelay != null) {
                     //启动定时任务
                     this.timer.schedule(new DeliverDelayedMessageTimerTask(level, offset), FIRST_DELAY_TIME);
@@ -137,7 +137,7 @@ public class ScheduleMessageService extends ConfigManager {
             }
 
             /**
-             * 定时持久化发送进度
+             * 定时将延时进度刷盘
              */
             this.timer.scheduleAtFixedRate(new TimerTask() {
 
@@ -260,6 +260,7 @@ public class ScheduleMessageService extends ConfigManager {
         public void run() {
             try {
                 if (isStarted()) {
+
                     this.executeOnTimeup();
                 }
             } catch (Exception e) {
@@ -287,6 +288,8 @@ public class ScheduleMessageService extends ConfigManager {
         }
 
         public void executeOnTimeup() {
+            //从上次处理完毕的offset中继续处理，获取对应的cq
+            //通过topic和qid获取consumequeue
             ConsumeQueue cq =
                 ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC,
                     delayLevel2QueueId(delayLevel));
@@ -294,6 +297,7 @@ public class ScheduleMessageService extends ConfigManager {
             long failScheduleOffset = offset;
 
             if (cq != null) {
+                // 取出起始offset的对应的CQ的一个bytebuffer封装
                 SelectMappedBufferResult bufferCQ = cq.getIndexBuffer(this.offset);
                 if (bufferCQ != null) {
                     try {
@@ -301,9 +305,10 @@ public class ScheduleMessageService extends ConfigManager {
                         int i = 0;
                         ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
                         for (; i < bufferCQ.getSize(); i += ConsumeQueue.CQ_STORE_UNIT_SIZE) {
-                            long offsetPy = bufferCQ.getByteBuffer().getLong();
-                            int sizePy = bufferCQ.getByteBuffer().getInt();
-                            long tagsCode = bufferCQ.getByteBuffer().getLong();
+                            //cq的3个组成
+                            long offsetPy = bufferCQ.getByteBuffer().getLong();//	消息 CommitLog 存储位置
+                            int sizePy = bufferCQ.getByteBuffer().getInt();//消息长度
+                            long tagsCode = bufferCQ.getByteBuffer().getLong();//消息tagscode
 
                             if (cq.isExtAddr(tagsCode)) {
                                 if (cq.getExt(tagsCode, cqExtUnit)) {
@@ -318,23 +323,26 @@ public class ScheduleMessageService extends ConfigManager {
                             }
 
                             long now = System.currentTimeMillis();
+                            //在生成messagequeue文件时(ReputMessageService.doReput) 延时消息的tagscode被设置成到期时间戳
+                            //通过tagsCode计算消息是否到达可消费的时候
                             //纠正可投递时间
                             long deliverTimestamp = this.correctDeliverTimestamp(now, tagsCode);
 
                             nextOffset = offset + (i / ConsumeQueue.CQ_STORE_UNIT_SIZE);
-
+                            //可投递事件减去当前时间
                             long countdown = deliverTimestamp - now;
                             //消息达到可发送时间
                             if (countdown <= 0) {
+                                // 因为cq是索引，取到cq，通过offsetPy和sizePy取获取真实的消息
                                 MessageExt msgExt =
                                     ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(
                                         offsetPy, sizePy);
-
+                                //取到了消息
                                 if (msgExt != null) {
                                     try {
                                         //设置消息内容 如真实的topic和真实的queueId
                                         MessageExtBrokerInner msgInner = this.messageTimeup(msgExt);
-                                        //发送消息
+                                        //保存消息到真正的topic和消息队列
                                         PutMessageResult putMessageResult =
                                             ScheduleMessageService.this.writeMessageStore
                                                 .putMessage(msgInner);
@@ -393,7 +401,10 @@ public class ScheduleMessageService extends ConfigManager {
                     }
                 } // end of if (bufferCQ != null)
                 else { //消费队列已经被删除部分，跳转到最小的消费进度
-
+                    /**
+                     * 索引文件被删除，定时任务中记录的offset已经被删除，会导致从该位置中取不到数据，
+                     * 这里直接纠正下一次定时任务的offset为当前定时任务队列的最小值
+                     */
                     long cqMinOffset = cq.getMinOffsetInQueue();
                     if (offset < cqMinOffset) {
                         failScheduleOffset = cqMinOffset;

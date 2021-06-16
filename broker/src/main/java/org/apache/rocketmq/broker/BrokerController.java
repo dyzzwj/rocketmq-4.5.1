@@ -520,6 +520,9 @@ public class BrokerController {
             log.warn("Load default discard message hook service: {}", DefaultTransactionalMessageCheckListener.class.getSimpleName());
         }
         this.transactionalMessageCheckListener.setBrokerController(this);
+        /**
+         * 创建事务消息检查service
+         */
         this.transactionalMessageCheckService = new TransactionalMessageCheckService(this);
     }
 

@@ -57,6 +57,9 @@ public class AllocateMappedFileService extends ServiceThread {
             }
         }
 
+        /**
+         * 将创建mappedFile封装成任务
+         */
         AllocateRequest nextReq = new AllocateRequest(nextFilePath, fileSize);
         boolean nextPutOK = this.requestTable.putIfAbsent(nextFilePath, nextReq) == null;
 
@@ -67,6 +70,9 @@ public class AllocateMappedFileService extends ServiceThread {
                 this.requestTable.remove(nextFilePath);
                 return null;
             }
+            /**
+             * 添加到队列中  线程任务调用AllocateMappedFileService#mmapOperation() 从queue中取出任务 创建mappedfile
+             */
             boolean offerOK = this.requestQueue.offer(nextReq);
             if (!offerOK) {
                 log.warn("never expected here, add a request to preallocate queue failed");
@@ -97,6 +103,9 @@ public class AllocateMappedFileService extends ServiceThread {
         AllocateRequest result = this.requestTable.get(nextFilePath);
         try {
             if (result != null) {
+                /**
+                 * 使用countdownlatch实现同步创建的效果
+                 */
                 boolean waitOK = result.getCountDownLatch().await(waitTimeOut, TimeUnit.MILLISECONDS);
                 if (!waitOK) {
                     log.warn("create mmap timeout " + result.getFilePath() + " " + result.getFileSize());
@@ -166,6 +175,11 @@ public class AllocateMappedFileService extends ServiceThread {
                 MappedFile mappedFile;
                 if (messageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
                     try {
+                        /**
+                         * 这种方式是在broker的配置文件中刷盘方式是异步刷盘并且TransientStorePoolEnable为true的情况下生效，
+                         * 该方式下MappedFile 会将向TransientStorePool 申请的堆外内存（Direct ByteBuffer）空间作为 writeBuffer，
+                         * 写入消息时先将消息写入 writeBuffer，然后将消息提交至 fileChannel 最后再 flush。
+                         */
                         mappedFile = ServiceLoader.load(MappedFile.class).iterator().next();
                         mappedFile.init(req.getFilePath(), req.getFileSize(), messageStore.getTransientStorePool());
                     } catch (RuntimeException e) {

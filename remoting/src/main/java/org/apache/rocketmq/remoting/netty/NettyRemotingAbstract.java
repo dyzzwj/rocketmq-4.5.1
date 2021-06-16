@@ -157,9 +157,11 @@ public abstract class NettyRemotingAbstract {
         if (cmd != null) {
             switch (cmd.getType()) {
                 case REQUEST_COMMAND:
+                    //请求
                     processRequestCommand(ctx, cmd);
                     break;
                 case RESPONSE_COMMAND:
+                    //响应
                     processResponseCommand(ctx, cmd);
                     break;
                 default:
@@ -192,20 +194,32 @@ public abstract class NettyRemotingAbstract {
      * @param cmd request command.
      */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
+        //根据RemotingCommand中的code获取processor和ExecutorService
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
+        //获取请求id
         final int opaque = cmd.getOpaque();
 
         if (pair != null) {
+            //先创建好任务
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
                     try {
+                        //钩子
                         doBeforeRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
+
+                        /**
+                         * processor处理请求
+                         */
                         final RemotingCommand response = pair.getObject1().processRequest(ctx, cmd);
+                        //钩子
                         doAfterRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
 
                         if (!cmd.isOnewayRPC()) {
+                            /**
+                             * 不是单向的
+                             */
                             if (response != null) {
                                 response.setOpaque(opaque);
                                 response.markResponseType();
@@ -243,7 +257,11 @@ public abstract class NettyRemotingAbstract {
             }
 
             try {
+                //封装RequestTask
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
+                /**
+                 * 提交任务到线程池
+                 */
                 pair.getObject2().submit(requestTask);
             } catch (RejectedExecutionException e) {
                 if ((System.currentTimeMillis() % 10000) == 0) {
@@ -313,6 +331,7 @@ public abstract class NettyRemotingAbstract {
                     @Override
                     public void run() {
                         try {
+                            //执行回调
                             responseFuture.executeInvokeCallback();
                         } catch (Throwable e) {
                             log.warn("execute callback in executor exception, and callback throw", e);
@@ -384,6 +403,7 @@ public abstract class NettyRemotingAbstract {
             Entry<Integer, ResponseFuture> next = it.next();
             ResponseFuture rep = next.getValue();
 
+            //超时
             if ((rep.getBeginTimestamp() + rep.getTimeoutMillis() + 1000) <= System.currentTimeMillis()) {
                 rep.release();
                 it.remove();
@@ -394,6 +414,7 @@ public abstract class NettyRemotingAbstract {
 
         for (ResponseFuture rf : rfList) {
             try {
+                //执行回调
                 executeInvokeCallback(rf);
             } catch (Throwable e) {
                 log.warn("scanResponseTable, operationComplete Exception", e);
@@ -454,6 +475,7 @@ public abstract class NettyRemotingAbstract {
         final InvokeCallback invokeCallback)
         throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         long beginStartTime = System.currentTimeMillis();
+        //相当于request ID, RemotingCommand会为每一个request产生一个request ID, 从0开始, 每次加1
         final int opaque = request.getOpaque();
         //信号量 同时最多支持发送多少个异步消息 默认为65535
         boolean acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
@@ -464,12 +486,20 @@ public abstract class NettyRemotingAbstract {
                 once.release();
                 throw new RemotingTimeoutException("invokeAsyncImpl call timeout");
             }
-            //封装回调方法（消息发送完成会进行回调）
+
+            /**
+             *  封装回调方法（消息发送完成会进行回调）  根据request ID构建ResponseFuture
+             * invokeCallback是在收到消息响应的时候能够根据responseTable找到请求码对应的回调执行方法
+             * semaphore参数用作流控，当多个线程同时往一个连接写数据时可以通过信号量控制permit同时写许可的数量。
+             */
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis - costTime, invokeCallback, once);
 
             /**
              *  保存回调方法 后续producer（netty client）接受到broker(netty server)的响应 会执行回调
              *  NettyRemotingClient.NettyClientHandler#channelRead0() 中 处理 responseTable中的回调方法
+             *
+             *  opaque表示请求发起方在同个连接上不同的请求标识代码，每次发送一个消息的时候，可以选择同步阻塞/异步非阻塞的方式。
+             *  无论是哪种通信方式，都会保存请求操作码至ResponseFuture的Map映射—responseTable中。
              */
             this.responseTable.put(opaque, responseFuture);
             try {
@@ -478,6 +508,7 @@ public abstract class NettyRemotingAbstract {
                     @Override
                     public void operationComplete(ChannelFuture f) throws Exception {
                         if (f.isSuccess()) {
+                            //如果发送消息成功给Server，那么这里直接Set后return
                             responseFuture.setSendRequestOK(true);
                             return;
                         }

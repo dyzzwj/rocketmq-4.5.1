@@ -35,8 +35,14 @@ public class MappedFileQueue {
 
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
+    /**
+     * 存储目录
+     */
     private final String storePath;
 
+    /**
+     * 单个文件的存储大小
+     */
     private final int mappedFileSize;
 
     /**
@@ -44,9 +50,18 @@ public class MappedFileQueue {
      */
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
+    /**
+     * 创建mappedfile的服务类
+     */
     private final AllocateMappedFileService allocateMappedFileService;
 
+    /**
+     * 刷盘指针 b表示指针之前的数据q全部持久化到磁盘
+     */
     private long flushedWhere = 0;
+    /**
+     * 当前数据提交指针 ne内存中bytebuffer当前的写指针，该值大于等于flushedWhere
+     */
     private long committedWhere = 0;
 
     private volatile long storeTimestamp = 0;
@@ -211,16 +226,33 @@ public class MappedFileQueue {
 
         if (createOffset != -1 && needCreate) {
             //需要创建文件
+            /**
+             * 构建出待创建的mappedFile的文件路径nextFilePath以及再下一个mappedFile的文件路径nextNextFilePath，
+             * 然后调用allocateMappedFileService服务的putRequestAndReturnMappedFile方法构建AllocateRequest
+             * （该请求实现了compareTo方法，请求是按照文件名称从小到大排序的，即创建mappedFile是有序的）请求并将请求放在其待处理的队列中，
+             * 后台allocateMappedFileService服务会从请求队列中获取请求并创建mappedFile
+             */
             String nextFilePath = this.storePath + File.separator + UtilAll.offset2FileName(createOffset);
             String nextNextFilePath = this.storePath + File.separator
                 + UtilAll.offset2FileName(createOffset + this.mappedFileSize);
             MappedFile mappedFile = null;
 
             if (this.allocateMappedFileService != null) {
+                /**
+                 *  异步创建mappedFile（最终使用countDownLatch实现同步创建）
+                 * mappedFile = ServiceLoader.load(MappedFile.class).iterator().next();
+                 * mappedFile.init(req.getFilePath(), req.getFileSize(), messageStore.getTransientStorePool());
+                 * 这种方式是在broker的配置文件中刷盘方式是异步刷盘并且TransientStorePoolEnable为true的情况下生效，
+                 * 该方式下MappedFile 会将向TransientStorePool 申请的堆外内存（Direct ByteBuffer）空间作为 writeBuffer，
+                 * 写入消息时先将消息写入 writeBuffer，然后将消息提交至 fileChannel 最后再 flush。
+                 */
                 mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
                     nextNextFilePath, this.mappedFileSize);
             } else {
                 try {
+                    /**
+                     * 这种方式是直接创建 MappedFile 内存映射文件字节缓冲区mappedByteBuffer，将消息写入 mappedByteBuffer 再 flush。
+                     */
                     mappedFile = new MappedFile(nextFilePath, this.mappedFileSize);
                 } catch (IOException e) {
                     log.error("create mappedFile exception", e);
@@ -249,6 +281,10 @@ public class MappedFileQueue {
 
         while (!this.mappedFiles.isEmpty()) {
             try {
+                /**
+                 * 在MappedFileQueue中使用CopyOnWriteArrayList mappedFiles记录了mappedFile的集合，
+                 * 在写入数据时我们总是在最新的mappedFile中写入数据，所以首先从mappedFiles中获取最后一个mappedFile
+                 */
                 mappedFileLast = this.mappedFiles.get(this.mappedFiles.size() - 1);
                 break;
             } catch (IndexOutOfBoundsException e) {

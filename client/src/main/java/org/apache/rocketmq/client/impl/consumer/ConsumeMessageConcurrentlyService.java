@@ -226,6 +226,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             try {
                 this.consumeExecutor.submit(consumeRequest);
             } catch (RejectedExecutionException e) {
+                //延迟5s后提交
                 this.submitConsumeRequestLater(consumeRequest);
             }
         } else {//提交消息大于批量消息数 分拆成多个消费请求
@@ -304,7 +305,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         //处理消费失败的消息
         switch (this.defaultMQPushConsumer.getMessageModel()) {
             case BROADCASTING:
-                //广播模式 无论是否消费失败 b不发挥消息到broker 只打印log
+                //广播模式 无论是否消费失败 不发回消息到broker 只打印log
                 /**
                  * 这里通过ackIndex判断消费成功还是失败
                  *  成功 ackIndex = consumeRequest.getMsgs().size() - 1; 下面的循环不会执行
@@ -433,10 +434,12 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             ConsumeConcurrentlyContext context = new ConsumeConcurrentlyContext(messageQueue);
             //消费结果状态
             ConsumeConcurrentlyStatus status = null;
+            //如果消息来自延迟队列则设置其topic为%RETRY_TOPIC%+consumerGroup
             defaultMQPushConsumerImpl.resetRetryAndNamespace(msgs, defaultMQPushConsumer.getConsumerGroup());
 
             ConsumeMessageContext consumeMessageContext = null;
             //钩子
+
             if (ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.hasHook()) {
                 consumeMessageContext = new ConsumeMessageContext();
                 consumeMessageContext.setNamespace(defaultMQPushConsumer.getNamespace());
@@ -445,6 +448,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 consumeMessageContext.setMq(messageQueue);
                 consumeMessageContext.setMsgList(msgs);
                 consumeMessageContext.setSuccess(false);
+                //如果开启了消息轨迹功能会在此处设置消费信息上下文consumeMessageContext并执行钩子函数
                 ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.executeHookBefore(consumeMessageContext);
             }
 
@@ -470,6 +474,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                     messageQueue);
                 hasException = true;
             }
+            //计算消息消费消耗的时间
             long consumeRT = System.currentTimeMillis() - beginTimestamp;
             //解析消费返回结果类型
             if (null == status) {
@@ -497,7 +502,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                     messageQueue);
                 status = ConsumeConcurrentlyStatus.RECONSUME_LATER;
             }
-
+            //如果开启了消息轨迹功能则将消费消息信息上下文consumeMessageContext中添加ConsumeContextType属性并将该属性的值设置为returnType
             if (ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.hasHook()) {
                 consumeMessageContext.setStatus(status.toString());
                 consumeMessageContext.setSuccess(ConsumeConcurrentlyStatus.CONSUME_SUCCESS == status);
