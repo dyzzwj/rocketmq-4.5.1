@@ -55,6 +55,9 @@ public class SlaveSynchronize {
          */
         this.syncConsumerOffset();
 
+        /**
+         * 同步延迟offset
+         */
         this.syncDelayOffset();
         /**
          *  同步订阅组配置

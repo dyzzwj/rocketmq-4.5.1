@@ -47,6 +47,9 @@ public class HAService {
 
     private final List<HAConnection> connectionList = new LinkedList<>();
 
+    /**
+     * master节点接受slave节点连接
+     */
     private final AcceptSocketService acceptSocketService;
 
     private final DefaultMessageStore defaultMessageStore;
@@ -56,6 +59,9 @@ public class HAService {
 
     private final GroupTransferService groupTransferService;
 
+    /**
+     * slave对master节点连接、读写数据 线程对象
+     */
     private final HAClient haClient;
 
     public HAService(final DefaultMessageStore defaultMessageStore) throws IOException {
@@ -161,6 +167,8 @@ public class HAService {
 
     /**
      * Listens to slave connections to create {@link HAConnection}.
+     *
+     * master节点接受slave节点连接
      */
     class AcceptSocketService extends ServiceThread {
         private final SocketAddress socketAddressListen;
@@ -332,6 +340,10 @@ public class HAService {
         }
     }
 
+
+    /**
+     * slave对master节点连接、读写数据 线程对象
+     */
     class HAClient extends ServiceThread {
         private static final int READ_MAX_BUFFER_SIZE = 1024 * 1024 * 4;
         private final AtomicReference<String> masterAddress = new AtomicReference<>();

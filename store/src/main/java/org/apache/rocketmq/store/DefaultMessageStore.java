@@ -163,6 +163,9 @@ public class DefaultMessageStore implements MessageStore {
         }
         this.consumeQueueTable = new ConcurrentHashMap<>(32);
 
+        /**
+         * consumequeue刷盘服务
+         */
         this.flushConsumeQueueService = new FlushConsumeQueueService();
         /**
          * 清理过期的commitLog
@@ -183,6 +186,10 @@ public class DefaultMessageStore implements MessageStore {
         } else {
             this.haService = null;
         }
+
+        /**
+         * 重放消息服务
+         */
         this.reputMessageService = new ReputMessageService();
 
         this.scheduleMessageService = new ScheduleMessageService(this);
@@ -313,6 +320,8 @@ public class DefaultMessageStore implements MessageStore {
              *  2. DLedger committedPos may be missing, so here just require dispatchBehindBytes <= 0
              */
             while (true) {
+                //重放消息要赶上commitLog的进度
+                //剩余需要重放字节数 <= 0
                 if (dispatchBehindBytes() <= 0) {
                     break;
                 }
@@ -323,11 +332,13 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         if (!messageStoreConfig.isEnableDLegerCommitLog()) {
+            //默认进这里
             this.haService.start();
             this.handleScheduleMessageService(messageStoreConfig.getBrokerRole());
         }
 
         this.flushConsumeQueueService.start();
+        //启动commitLog刷盘线程
         this.commitLog.start();
         this.storeStatsService.start();
 
@@ -1542,7 +1553,9 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public void putMessagePositionInfo(DispatchRequest dispatchRequest) {
+        //根据topic 和 queueid获取consumequeue
         ConsumeQueue cq = this.findConsumeQueue(dispatchRequest.getTopic(), dispatchRequest.getQueueId());
+        //写到consumequeue
         cq.putMessagePositionInfoWrapper(dispatchRequest);
     }
 

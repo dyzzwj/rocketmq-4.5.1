@@ -392,7 +392,7 @@ public class BrokerController {
                 }
             }, 3, 3, TimeUnit.MINUTES);
 
-            //打印水位线程池（打印各个队列的大小）
+            //打印水位 线程池（打印各个队列的大小）
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
@@ -438,6 +438,7 @@ public class BrokerController {
 
             if (!messageStoreConfig.isEnableDLegerCommitLog()) {
                 if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
+                    //slave
                     if (this.messageStoreConfig.getHaMasterAddress() != null && this.messageStoreConfig.getHaMasterAddress().length() >= 6) {
                         this.messageStore.updateHaMasterAddress(this.messageStoreConfig.getHaMasterAddress());
                         this.updateMasterHAServerAddrPeriodically = false;
@@ -445,6 +446,7 @@ public class BrokerController {
                         this.updateMasterHAServerAddrPeriodically = true;
                     }
                 } else {
+                    //master 打印master和slave的差别
                     this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                         @Override
                         public void run() {
@@ -890,6 +892,9 @@ public class BrokerController {
         }
 
         if (this.pullRequestHoldService != null) {
+            /**
+             * 拉取消息请求挂起维护线程服务。
+             */
             this.pullRequestHoldService.start();
         }
 
@@ -912,6 +917,7 @@ public class BrokerController {
 
         //将broker注册到nameserver
         this.registerBrokerAll(true, false, true);
+
 
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -1163,6 +1169,7 @@ public class BrokerController {
 
     private void handleSlaveSynchronize(BrokerRole role) {
         if (role == BrokerRole.SLAVE) {
+            //slave节点
             if (null != slaveSyncFuture) {
                 slaveSyncFuture.cancel(false);
             }
@@ -1261,6 +1268,7 @@ public class BrokerController {
 
     private void startProcessorByHa(BrokerRole role) {
         if (BrokerRole.SLAVE != role) {
+            //master
             if (this.transactionalMessageCheckService != null) {
                 this.transactionalMessageCheckService.start();
             }
