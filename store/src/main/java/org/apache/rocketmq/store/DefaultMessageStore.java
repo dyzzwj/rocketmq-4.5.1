@@ -131,7 +131,13 @@ public class DefaultMessageStore implements MessageStore {
         this.consumeQueueTable = new ConcurrentHashMap<>(32);
 
         this.flushConsumeQueueService = new FlushConsumeQueueService();
+        /**
+         * 清理过期的commitLog
+         */
         this.cleanCommitLogService = new CleanCommitLogService();
+        /**
+         * 清理过期的consumequeue
+         */
         this.cleanConsumeQueueService = new CleanConsumeQueueService();
         this.storeStatsService = new StoreStatsService();
         this.indexService = new IndexService(this);
