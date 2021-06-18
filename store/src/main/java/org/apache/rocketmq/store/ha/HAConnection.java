@@ -115,6 +115,9 @@ public class HAConnection {
                         break;
                     }
 
+                    /**
+                     * 检测心跳间隔时间 超时则强制断开
+                     */
                     long interval = HAConnection.this.haService.getDefaultMessageStore().getSystemClock().now() - this.lastReadTimestamp;
                     if (interval > HAConnection.this.haService.getDefaultMessageStore().getMessageStoreConfig().getHaHousekeepingInterval()) {
                         log.warn("ha housekeeping, found this connection[" + HAConnection.this.clientAddr + "] expired, " + interval);
@@ -177,10 +180,10 @@ public class HAConnection {
                             long readOffset = this.byteBufferRead.getLong(pos - 8);
                             this.processPostion = pos;
 
-                            //设置slave 同步到的commitLog的最大offset
+                            //设置slave 同步到的commitLog的最大offset   每次Slave上传的Offset
                             HAConnection.this.slaveAckOffset = readOffset;
                             if (HAConnection.this.slaveRequestOffset < 0) {
-                                //设置slave第一次请求的位置
+                                //设置slave第一次请求的位置  第一次Slave上传的offset
                                 HAConnection.this.slaveRequestOffset = readOffset;
                                 log.info("slave[" + HAConnection.this.clientAddr + "] request offset " + readOffset);
                             }
@@ -213,8 +216,10 @@ public class HAConnection {
 
         private final int headerSize = 8 + 4;
         private final ByteBuffer byteBufferHeader = ByteBuffer.allocate(headerSize);
+        //记录着从commitLog哪个offset拉取消息
         private long nextTransferFromWhere = -1;
         private SelectMappedBufferResult selectMappedBufferResult;
+        ////标记着是否传输完成
         private boolean lastWriteOver = true;
         private long lastWriteTimestamp = System.currentTimeMillis();
 
@@ -239,7 +244,7 @@ public class HAConnection {
                         continue;
                     }
 
-                    //计算初始化nextTransferFromWhere
+                    //计算nextTransferFromWhere
                     if (-1 == this.nextTransferFromWhere) {
                         if (0 == HAConnection.this.slaveRequestOffset) {
                             long masterOffset = HAConnection.this.haService.getDefaultMessageStore().getCommitLog().getMaxOffset();
@@ -291,11 +296,12 @@ public class HAConnection {
                             continue;
                     }
 
-                    //选择新的commitLog数据进行传输
+                    //选择新的commitLog数据进行传输  传入一个offset，从CommitLog去拉取消息，和消费者拉取消息类似
                     SelectMappedBufferResult selectResult =
                         HAConnection.this.haService.getDefaultMessageStore().getCommitLogData(this.nextTransferFromWhere);
                     if (selectResult != null) {
                         int size = selectResult.getSize();
+                        //每次只同步32K的数据
                         if (size > HAConnection.this.haService.getDefaultMessageStore().getMessageStoreConfig().getHaTransferBatchSize()) {
                             size = HAConnection.this.haService.getDefaultMessageStore().getMessageStoreConfig().getHaTransferBatchSize();
                         }
@@ -312,7 +318,7 @@ public class HAConnection {
                         this.byteBufferHeader.putLong(thisOffset);
                         this.byteBufferHeader.putInt(size);
                         this.byteBufferHeader.flip();
-
+                        //传输数据
                         this.lastWriteOver = this.transferData();
                     } else {
                         //没新的消息 挂起等待
