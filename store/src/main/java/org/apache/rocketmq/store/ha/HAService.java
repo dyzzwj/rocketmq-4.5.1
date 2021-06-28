@@ -209,6 +209,8 @@ public class HAService {
 
         /**
          * {@inheritDoc}
+         * master节点接受slave节点连接
+         *
          */
         @Override
         public void run() {
@@ -229,8 +231,14 @@ public class HAService {
                                         + sc.socket().getRemoteSocketAddress());
 
                                     try {
+                                        // 每有一个Slave连接进来，都会构建一个HAConnection对象，并持有对应的Channel
                                         HAConnection conn = new HAConnection(HAService.this, sc);
+                                        /**
+                                         *  readSocketService：处理Slave上传的进度及其他相关操作
+                                         *  writeSocketService：
+                                         */
                                         conn.start();
+                                        //将连接保存到connectionList中
                                         HAService.this.addConnection(conn);
                                     } catch (Exception e) {
                                         log.error("new HAConnection exception", e);
@@ -296,6 +304,7 @@ public class HAService {
                         boolean transferOK = HAService.this.push2SlaveMaxOffset.get() >= req.getNextOffset();
                         /**
                          * 等待slave上传进度
+                         * 重试 5次，每次条件不符合都等待Slave上传同步结果
                          */
                         for (int i = 0; !transferOK && i < 5; i++) {
                             this.notifyTransferObject.waitForRunning(1000);
@@ -346,14 +355,25 @@ public class HAService {
      */
     class HAClient extends ServiceThread {
         private static final int READ_MAX_BUFFER_SIZE = 1024 * 1024 * 4;
+        /**
+         * 主节点 ip:port
+         */
         private final AtomicReference<String> masterAddress = new AtomicReference<>();
+        /**
+         *  向Master汇报Slave最大Offset
+         */
         private final ByteBuffer reportOffset = ByteBuffer.allocate(8);
         private SocketChannel socketChannel;
         private Selector selector;
         private long lastWriteTimestamp = System.currentTimeMillis();
 
+        /**
+         * // Slave向Master汇报Offset，汇报到哪里
+         */
         private long currentReportedOffset = 0;
+        // 粘包拆包使用的
         private int dispatchPostion = 0;
+        // 从Master接收数据Buffer
         private ByteBuffer byteBufferRead = ByteBuffer.allocate(READ_MAX_BUFFER_SIZE);
         private ByteBuffer byteBufferBackup = ByteBuffer.allocate(READ_MAX_BUFFER_SIZE);
 
@@ -485,7 +505,8 @@ public class HAService {
                             return false;
                         }
                     }
-                    //读取到消息
+                    //粘包和拆包的处理
+                    // 如果diff 小于MSG_HEADER_SIZE + bodySize的值，那么代表发生拆包，等待下一次读取数据
                     if (diff >= (msgHeaderSize + bodySize)) {
                         byte[] bodyData = new byte[bodySize];
                         this.byteBufferRead.position(this.dispatchPostion + msgHeaderSize);
@@ -498,7 +519,7 @@ public class HAService {
                         //设置处理到的位置
                         this.byteBufferRead.position(readSocketPos);
                         this.dispatchPostion += msgHeaderSize + bodySize;
-                        //上报到master进度
+                        //将同步进度上报给master进度
                         if (!reportSlaveMaxOffsetPlus()) {
                             return false;
                         }
@@ -537,6 +558,9 @@ public class HAService {
 
         private boolean connectMaster() throws ClosedChannelException {
             if (null == socketChannel) {
+                /**
+                 *  master的masterAddress为空 所以直接跳过
+                 */
                 String addr = this.masterAddress.get();
                 if (addr != null) {
 
@@ -594,7 +618,7 @@ public class HAService {
                     //有没有连接到master  会更新currentReportedOffset
                     if (this.connectMaster()) {
 
-                        //若满足上报间隔 上报给master进度
+                        //若满足上报间隔   默认5s
                         if (this.isTimeToReportOffset()) {
                             /**
                              *  上报给master当前slave的本地的commitLog已经同步的物理位置
@@ -628,7 +652,7 @@ public class HAService {
                         if (!reportSlaveMaxOffsetPlus()) {
                             continue;
                         }
-                        //master过久为返回数据 关闭连接
+                        //master过久未返回数据 关闭连接
                         long interval =
                             HAService.this.getDefaultMessageStore().getSystemClock().now()
                                 - this.lastWriteTimestamp;

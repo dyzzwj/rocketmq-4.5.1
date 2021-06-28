@@ -727,14 +727,21 @@ public class CommitLog {
         //如果是同步master（当前节点是master 并且数据同步是同步模式） 同步到从节点（之后才能返回响应）
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
+            //是否等待服务器将消息存储完毕再返回
             if (messageExt.isWaitStoreMsgOK()) {
                 // Determine whether to wait
+                // isSlaveOK满足如下两个条件
+                // 当Slave和Master的进度相差小于256M，则认为正常
+                // 当Slave连接数大于0，则认为正常
                 if (service.isSlaveOK(result.getWroteOffset() + result.getWroteBytes())) {
                     GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
+                    //最终调用了GroupTransferService的putRequest方法，即doWaitTransfer方法的那个集合
                     service.putRequest(request);
                     //唤醒WriteSocketService
                     service.getWaitNotifyObject().wakeupAll();
                     //等待slave给master上报同步到的commitLog最新的offset
+                    // 这里就是上面讲的地方，即等到同步完成
+                    // 从代码层面来讲就是，就是等到Slave同步到的offset>result.getWroteOffset() + result.getWroteBytes()
                     boolean flushOK =
                         request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
                     if (!flushOK) {
@@ -746,6 +753,8 @@ public class CommitLog {
                 // Slave problem
                 else {
                     // Tell the producer, slave not available
+                    // 如果没有Slave的情况下，还配置了SYNC_MASTER的模式，
+                    // 那么isSlaveOK中第二个条件就直接失败了，producer发送消息就会一直报这个错误
                     putMessageResult.setPutMessageStatus(PutMessageStatus.SLAVE_NOT_AVAILABLE);
                 }
             }
