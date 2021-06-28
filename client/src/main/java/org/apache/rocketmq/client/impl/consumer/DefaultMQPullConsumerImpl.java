@@ -669,6 +669,10 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
 
                 this.offsetStore.load();
 
+                /**
+                 * 注册消费者 一个应用程序，一个消费组，只需要一个DefaultMQPushConsumerImpl,，在一个应用中，使用多线程创建多个
+                 *   者，尝试去消费同一个组，没有效果，只会有一个消费者在消费
+                 */
                 boolean registerOK = mQClientFactory.registerConsumer(this.defaultMQPullConsumer.getConsumerGroup(), this);
                 if (!registerOK) {
                     this.serviceState = ServiceState.CREATE_JUST;
@@ -678,7 +682,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
                         null);
                 }
 
-                //启动 生产者和消费者都会调用此方法
+                //启动 生产者和消费者都会调用此方法 mQClientFactory.start()里面的方法只会执行一次
                 mQClientFactory.start();
                 log.info("the consumer [{}] start OK", this.defaultMQPullConsumer.getConsumerGroup());
                 this.serviceState = ServiceState.RUNNING;

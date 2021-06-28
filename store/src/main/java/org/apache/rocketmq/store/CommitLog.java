@@ -567,7 +567,7 @@ public class CommitLog {
         int queueId = msg.getQueueId();
 
         final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
-        //定时（延时）消息处理
+        //延时消息处理
         if (tranType == MessageSysFlag.TRANSACTION_NOT_TYPE
             || tranType == MessageSysFlag.TRANSACTION_COMMIT_TYPE) {
             // Delay Delivery
@@ -584,7 +584,7 @@ public class CommitLog {
                 queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());
 
                 // Backup real topic, queueId
-                //备份真是的topic和queueId
+                //备份真实的topic和queueId
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_TOPIC, msg.getTopic());
                 MessageAccessor.putProperty(msg, MessageConst.PROPERTY_REAL_QUEUE_ID, String.valueOf(msg.getQueueId()));
                 msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
@@ -687,10 +687,10 @@ public class CommitLog {
          */
         if (FlushDiskType.SYNC_FLUSH == this.defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
             final GroupCommitService service = (GroupCommitService) this.flushCommitLogService;
-            if (messageExt.isWaitStoreMsgOK()) {//在同步刷盘的情况下是否需要等待l落地才认为消息发送成功
+            if (messageExt.isWaitStoreMsgOK()) {//在同步刷盘的情况下是否需要等待消息落地才认为消息发送成功
                 //构造同步刷盘的请求
                 GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
-                //添加到待提交队列
+                //刷盘请求添加到待提交队列
                 service.putRequest(request);
                 //等待刷盘线程执行刷盘操作 CoumtDownLatch
                 boolean flushOK = request.waitForFlush(this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
@@ -1188,7 +1188,7 @@ public class CommitLog {
             synchronized (this.requestsWrite) {
                 this.requestsWrite.add(request);
             }
-            //如果刷盘线程还没有被唤醒 则唤醒
+            //如果刷盘线程还没有被唤醒 则唤醒 如果已唤醒 则什么都不做
             if (hasNotified.compareAndSet(false, true)) {
                 waitPoint.countDown(); // notify
             }
@@ -1208,6 +1208,7 @@ public class CommitLog {
 
         private void doCommit() {
             synchronized (this.requestsRead) {
+                //刷盘时从requestsRead队列中读
                 if (!this.requestsRead.isEmpty()) {
                     //遍历写入请求
                     for (GroupCommitRequest req : this.requestsRead) {
@@ -1215,7 +1216,9 @@ public class CommitLog {
                         // two times the flush
                         boolean flushOK = false;
                         for (int i = 0; i < 2 && !flushOK; i++) {
-                            //是否满足需要flush条件，即请求的offset超过flush的offset
+                            //是否满足需要flush条件，已经flush的offset大于请求的offset
+                            //如果大于 返回true 表示不需要flush 因为已经flush过了
+                            //如果小于 返回flase 表示需要flush
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
 
                             if (!flushOK) {
@@ -1223,7 +1226,7 @@ public class CommitLog {
                                 CommitLog.this.mappedFileQueue.flush(0);
                             }
                         }
-                        //唤醒发起当前写请求的线程
+                        //唤醒发起当前刷盘请求的线程
                         req.wakeupCustomer(flushOK);
                     }
 
@@ -1256,6 +1259,11 @@ public class CommitLog {
                      * 当然，性能相对异步落盘较差，可靠性更高，需要我们在实际使用时去取舍
                      */
                     //是否需要阻塞（是否有任务执行）
+                    /**
+                     * 如果是唤醒状态(hasNotified为true) 说明有任务需要执行（putRequest会修改状态唤醒线程） 就先执行swapRequests交换读写队列 执行doCommit
+                     * 如果不是唤醒状态(hasNotified为false) 就等待 最多10ms
+                     */
+
                     this.waitForRunning(10);
                     //刷盘
                     this.doCommit();

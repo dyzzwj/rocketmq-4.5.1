@@ -526,7 +526,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
 
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
-        //选择一个messagequeue
+        //根据选择策略选择一个messagequeue
         return this.mqFaultStrategy.selectOneMessageQueue(tpInfo, lastBrokerName);
     }
 
@@ -560,8 +560,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             SendResult sendResult = null;
             /**
              * 计算重试次数
-             * 1、同步发送 ： 1 + 配置重试次数
-             * 2、异步发送：1
+             * 1、同步发送 ： 1 + 配置重试次数（默认为2）
+             * 2、异步发送 和 单向发送：1
              */
             int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
             //记录发送次数

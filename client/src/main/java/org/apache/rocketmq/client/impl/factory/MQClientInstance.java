@@ -85,17 +85,27 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+/**
+ *  一个客户端 IP@InstanceName 只会持有一个 MQClientInstance 对象，MQClientInstance 无论是消费者还是生产者，都在应用程序这一端。
+ */
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
     private final InternalLogger log = ClientLogger.getLog();
     private final ClientConfig clientConfig;
+    //MQClientInstance在同一台机器上的创建序号。
     private final int instanceIndex;
+    //客户端id
     private final String clientId;
     private final long bootTimestamp = System.currentTimeMillis();
+    //消息生产者，也就是在应用程序一端，每个生产者组在同一台应用服务器只需要初始化一个生产者实例
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();
     /**
      *  k - 消费者组
      *  v -
+     *  也就是在应用程序一 端  ，每个消费组，在同一台应用服务器只需要初始化一个消费者即可。
+     *  一个应用程序，一个消费组，只需要一个DefaultMQPushConsumerImpl,，在一个应用中，使用多线程创建多个
+     * 消费者，尝试去消费同一个组，没有效果，只会有一个消费者在消费
+     *
      */
     private final ConcurrentMap<String/* group */, MQConsumerInner> consumerTable = new ConcurrentHashMap<String, MQConsumerInner>();
     private final ConcurrentMap<String/* group */, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<String, MQAdminExtInner>();

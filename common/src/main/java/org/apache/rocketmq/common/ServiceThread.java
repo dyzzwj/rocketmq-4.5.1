@@ -130,7 +130,9 @@ public abstract class ServiceThread implements Runnable {
     }
 
     protected void waitForRunning(long interval) {
-        //如果是唤醒状态（putRequest会修改状态），说明有任务待执行 就返回 执行commit()任务
+        //如果是唤醒状态（hasNotified为true），说明有任务待执行（（putRequest会修改状态）） 就返回 执行commit()任务
+        //如果不是唤醒状态（hasNotified为false） 就阻塞
+
         if (hasNotified.compareAndSet(true, false)) {
             this.onWaitEnd();
             return;

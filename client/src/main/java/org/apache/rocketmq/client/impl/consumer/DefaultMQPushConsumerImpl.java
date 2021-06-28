@@ -446,7 +446,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
         boolean commitOffsetEnable = false;
         long commitOffsetValue = 0L;
-        //集群模式下 计算提交的消费进度
+        //集群模式下 计算提交的消费进度 从内存中获取MessageQueue的commitlog偏移量。
         if (MessageModel.CLUSTERING == this.defaultMQPushConsumer.getMessageModel()) {
             commitOffsetValue = this.offsetStore.readOffset(pullRequest.getMessageQueue(), ReadOffsetType.READ_FROM_MEMORY);
             if (commitOffsetValue > 0) {
@@ -466,7 +466,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             classFilter = sd.isClassFilterMode();
         }
 
-        //计算拉取消息系统标识
+        //计算拉取消息系统标识 构建拉取消息系统Flag: 是否支持comitOffset,suspend,subExpression,classFilter
         int sysFlag = PullSysFlag.buildSysFlag(
             commitOffsetEnable, // commitOffset
             true, // suspend
@@ -642,10 +642,10 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 //消费者组  订阅消息 listener 消费模式(广播、集群)
                 this.checkConfig();
 
-                //将订阅信息复制到RebanlanceImpl
+                //将订阅信息复制到RebanlanceImpl 加工订阅信息，同时，如果消息消费模式为集群模式，还需要为该消费组对应一个重试主题。
                 this.copySubscription();
 
-                //如果是集群模式
+                // 如果消息消费模式为集群模式，并且当前的实例名为 DEFAULT，替换为当前客户端进程的PID
                 if (this.defaultMQPushConsumer.getMessageModel() == MessageModel.CLUSTERING) {
                     this.defaultMQPushConsumer.changeInstanceNameToPID();
                 }

@@ -69,7 +69,7 @@ public class MQFaultStrategy {
     }
 
     /**
-     * 根据 Topic发布信息 选择一个消息队列
+     * 根据 Topic信息 选择一个消息队列
      */
     public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
         //是否支持容错 默认是false

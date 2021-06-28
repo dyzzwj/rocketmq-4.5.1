@@ -455,7 +455,7 @@ public abstract class NettyRemotingAbstract {
              * NettyRemotingClient.NettyClientHandler#channelRead0() 当接受到broker的响应后 进行唤醒
              */
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
-            //接受到响应后 解决阻塞
+            //接受到响应后 解阻塞
             if (null == responseCommand) {
                 if (responseFuture.isSendRequestOK()) {
                     throw new RemotingTimeoutException(RemotingHelper.parseSocketAddressAddr(addr), timeoutMillis,
@@ -572,7 +572,7 @@ public abstract class NettyRemotingAbstract {
     public void invokeOnewayImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis)
         throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         request.markOnewayRPC();
-        // 信号量 同时最多支持发送多少个异步消息 默认为65535
+        // 信号量 同时最多支持发送多少个单向消息 默认为65535
         boolean acquired = this.semaphoreOneway.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
         if (acquired) {
             final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreOneway);

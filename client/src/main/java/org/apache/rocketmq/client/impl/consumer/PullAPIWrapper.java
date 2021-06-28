@@ -189,16 +189,16 @@ public class PullAPIWrapper {
      */
     public PullResult pullKernelImpl(
         final MessageQueue mq,
-        final String subExpression,
+        final String subExpression, //消息订阅子模式subscribe( topicName, "模式")
         final String expressionType,
         final long subVersion,
         final long offset,
         final int maxNums,
         final int sysFlag,
-        final long commitOffset,
-        final long brokerSuspendMaxTimeMillis,
-        final long timeoutMillis,
-        final CommunicationMode communicationMode,
+        final long commitOffset, // 当前消息队列 commitlog日志中当前的最新偏移量（内存中）
+        final long brokerSuspendMaxTimeMillis, // 允许的broker 暂停的时间，毫秒为单位，默认为15s
+        final long timeoutMillis, // 超时时间,默认为30s
+        final CommunicationMode communicationMode, // SYNC ASYNC ONEWAY
         final PullCallback pullCallback
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         //获取broker信息

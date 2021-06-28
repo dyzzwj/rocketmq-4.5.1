@@ -378,7 +378,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         msgInner.setQueueId(queueIdInt);
 
         /**
-         * 对RETRY类型的消息处理。如果超过最大消费次数，则topic修改成"%DLQ%" + 分组名，即加入 死信队列(Dead Letter Queue)
+         * 对RETRY类型的消息处理。如果超过最大消费次数，则topic修改成"%DLQ%" + 原topic名，即加入 死信队列(Dead Letter Queue)
          */
         if (!handleRetryAndDLQ(requestHeader, response, request, msgInner, topicConfig)) {
             return response;
