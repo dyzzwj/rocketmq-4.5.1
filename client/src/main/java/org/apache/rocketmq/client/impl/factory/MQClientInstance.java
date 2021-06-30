@@ -317,7 +317,11 @@ public class MQClientInstance {
     }
 
     private void startScheduledTask() {
-        //如果没有指定nameserver 就定时请求指定地址获取nameserver
+
+        /**
+         *   每隔2分钟尝试获取一次NameServer地址
+         *   如果没有指定nameserver 就定时请求指定地址获取nameserver
+         */
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -333,6 +337,7 @@ public class MQClientInstance {
         }
 
         /**
+         *  每隔30S尝试更新主题路由信息
          * 定时从nameserver上获取topic信息
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
@@ -371,6 +376,7 @@ public class MQClientInstance {
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
 
         /**
+         *  默认每隔5秒持久化ConsumeOffset
          * 持久化消费者offset
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
@@ -390,7 +396,7 @@ public class MQClientInstance {
 
 
         /**
-         * 调整线程池
+         * 默认每隔1S检查线程池适配
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 

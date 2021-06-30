@@ -24,6 +24,10 @@ public class Consumer {
 
     public static void main(String[] args) throws Exception {
 
+        /**
+         *  一个应用创建一个consumer 由应用来维护此对象
+         *  consumerGroup需要保证应用内唯一
+         */
         //1、创建消费者 指定消费者组
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("consumer-1-0");
 

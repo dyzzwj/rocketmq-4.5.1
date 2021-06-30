@@ -79,6 +79,9 @@ import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
+/**
+ * 消息消费默认实现类，应用程序中直接用该类的实例完成消息的消费，并回调业务方法。
+ */
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     /**
      * Delay some time when exception occur
@@ -102,12 +105,27 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     private final ArrayList<ConsumeMessageHook> consumeMessageHookList = new ArrayList<ConsumeMessageHook>();
     private final RPCHook rpcHook;
     private volatile ServiceState serviceState = ServiceState.CREATE_JUST;
+    /**
+     * 消息客户端实例，负载与MQ服务器（Broker,Nameserver)交互的网络实现
+     */
     private MQClientInstance mQClientFactory;
+    /**
+     *  pull与Push在RocketMQ中，其实就只有Pull模式，所以Push其实就是用pull封装一下
+     */
     private PullAPIWrapper pullAPIWrapper;
     private volatile boolean pause = false;
     private boolean consumeOrderly = false;
+    /**
+     *  消费消费回调类，当消息分配给消费者消费时，执行的业务代码入口
+     */
     private MessageListener messageListenerInner;
+    /**
+     * 消息消费进度保存
+     */
     private OffsetStore offsetStore;
+    /**
+     * 消息消费逻辑
+     */
     private ConsumeMessageService consumeMessageService;
     private long queueFlowControlTimes = 0;
     private long queueMaxSpanFlowControlTimes = 0;

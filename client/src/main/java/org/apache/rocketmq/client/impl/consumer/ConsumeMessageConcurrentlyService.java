@@ -77,6 +77,12 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         this.consumerGroup = this.defaultMQPushConsumer.getConsumerGroup();
         this.consumeRequestQueue = new LinkedBlockingQueue<Runnable>();
 
+        /**
+         *  一个消费者非顺序消费者，内部使用一个线程池来并非消费消息，一个线程一批次最大处理consumeMessageBatchMaxSize条消息。
+         * 线程池的常驻线程数：consumeThreadMin
+         * 线程池的最大线程数：consumeThreadMax
+         * 线程池中的线程名：ConsumeMessageThread_
+         */
         this.consumeExecutor = new ThreadPoolExecutor(
             this.defaultMQPushConsumer.getConsumeThreadMin(),
             this.defaultMQPushConsumer.getConsumeThreadMax(),
@@ -434,7 +440,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             ConsumeConcurrentlyContext context = new ConsumeConcurrentlyContext(messageQueue);
             //消费结果状态
             ConsumeConcurrentlyStatus status = null;
-            //如果消息来自延迟队列则设置其topic为%RETRY_TOPIC%+consumerGroup
+            //设置消息的重试主题为%RETRY_TOPIC%+consumerGroup
             defaultMQPushConsumerImpl.resetRetryAndNamespace(msgs, defaultMQPushConsumer.getConsumerGroup());
 
             ConsumeMessageContext consumeMessageContext = null;
