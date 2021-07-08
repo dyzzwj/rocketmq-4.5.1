@@ -305,7 +305,10 @@ public abstract class NettyRemotingAbstract {
 
             //异步消息InvokeCallback不为空
             if (responseFuture.getInvokeCallback() != null) {
-                //执行回调
+                /**
+                 * 1、发送消息回调
+                 * 2、消费消息回调
+                 */
                 executeInvokeCallback(responseFuture);
             } else {
                 //同步消息InvokeCallback为空

@@ -334,6 +334,12 @@ public class ProcessQueue {
 
     public long commit() {
         try {
+            /**
+             * 首先申请 lockTreeMap 写锁，获取consumingMsgOrderlyTreeMap中最大的消息偏移量offset，
+             * consumingMsgOrderlyTreeMap中存放的是本批消费的消息。然后更新msgCount、msgSize，
+             * 并清除 consumingMsgOrderlyTreeMap。并返回offset+1消息消费进度，从中可以看出offset表示消息消费队列的逻辑偏移量，
+             * 类似于数组下标，然后调用消息进度存储器存储消息消费进度，完成该批消息的消费。
+             */
             this.lockTreeMap.writeLock().lockInterruptibly();
             try {
                 //消费进度

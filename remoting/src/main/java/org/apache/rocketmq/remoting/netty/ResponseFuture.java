@@ -51,6 +51,11 @@ public class ResponseFuture {
     public void executeInvokeCallback() {
         if (invokeCallback != null) {
             if (this.executeCallbackOnlyOnce.compareAndSet(false, true)) {
+
+                /**
+                 * 发送消息回调
+                 * 消费消息回调
+                 */
                 invokeCallback.operationComplete(this);
             }
         }

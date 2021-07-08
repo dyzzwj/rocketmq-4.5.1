@@ -86,7 +86,7 @@ import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 /**
- *  一个客户端 IP@InstanceName 只会持有一个 MQClientInstance 对象，MQClientInstance 无论是消费者还是生产者，都在应用程序这一端。
+ *  一个jvm进程对应一个rocketmq客户端 IP@InstanceName 只会持有一个 MQClientInstance 对象，MQClientInstance 无论是消费者还是生产者，都在应用程序这一端。
  */
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;

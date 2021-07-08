@@ -377,7 +377,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
     @Override
     public void doRebalance() {
         if (this.rebalanceImpl != null) {
-            //而pull模式，总是认为是无序的，因为写死了为false
+            //而pull模式，总是认为是无序的，因此Defa写死了为false
             this.rebalanceImpl.doRebalance(false);
         }
     }

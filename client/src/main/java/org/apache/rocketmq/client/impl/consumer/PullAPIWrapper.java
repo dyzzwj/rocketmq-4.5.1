@@ -192,7 +192,7 @@ public class PullAPIWrapper {
         final String subExpression, //消息订阅子模式subscribe( topicName, "模式")
         final String expressionType,
         final long subVersion,
-        final long offset,
+        final long offset,//拉取队列开始位置
         final int maxNums,
         final int sysFlag,
         final long commitOffset, // 当前消息队列 commitlog日志中当前的最新偏移量（内存中）
@@ -235,6 +235,7 @@ public class PullAPIWrapper {
             requestHeader.setConsumerGroup(this.consumerGroup);
             requestHeader.setTopic(mq.getTopic());
             requestHeader.setQueueId(mq.getQueueId());
+            //拉取队列开始位置P
             requestHeader.setQueueOffset(offset);
             requestHeader.setMaxMsgNums(maxNums);
             requestHeader.setSysFlag(sysFlagInner);

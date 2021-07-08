@@ -105,6 +105,7 @@ public class BrokerConfig {
     private int commercialBigCount = 1;
     private int commercialBaseCount = 1;
 
+    //是否通过堆内存传输数据
     private boolean transferMsgByHeap = true;
     private int maxDelayTime = 40;
 

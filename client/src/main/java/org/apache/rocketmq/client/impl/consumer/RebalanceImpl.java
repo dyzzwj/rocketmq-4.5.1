@@ -67,6 +67,9 @@ public abstract class RebalanceImpl {
      *  v - processqueue
      */
     protected final ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);
+    /**
+     * topic队列信息
+     */
     protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
         new ConcurrentHashMap<String, Set<MessageQueue>>();
     /**
@@ -79,6 +82,9 @@ public abstract class RebalanceImpl {
      */
     protected String consumerGroup;
     protected MessageModel messageModel;
+    /**
+     * 对垒分配算法
+     */
     protected AllocateMessageQueueStrategy allocateMessageQueueStrategy;
     protected MQClientInstance mQClientFactory;
 
@@ -187,6 +193,7 @@ public abstract class RebalanceImpl {
 
                     ProcessQueue processQueue = this.processQueueTable.get(mmqq);
                     if (processQueue != null) {
+                        //当前消费者持有当前processQueue的分布式锁
                         processQueue.setLocked(true);
                         processQueue.setLastLockTimestamp(System.currentTimeMillis());
                     }
@@ -213,6 +220,7 @@ public abstract class RebalanceImpl {
      */
     public void lockAll() {
         //获得当前消费者所负载的messagequeue 按照broker进行分组
+        //负载的消息队列在RebalanceService时根据当前消费者数量与消息消费队列按照负载算法进行分配，然后尝试对该消息队列加锁，如果申请锁成功，则加入到待拉取任务中
         HashMap<String, Set<MessageQueue>> brokerMqs = this.buildProcessQueueTableByBrokerName();
 
 
@@ -236,15 +244,17 @@ public abstract class RebalanceImpl {
                 LockBatchRequestBody requestBody = new LockBatchRequestBody();
                 requestBody.setConsumerGroup(this.consumerGroup);
                 requestBody.setClientId(this.mQClientFactory.getClientId());
+                //需要获取分布式锁的messagequeue集合
                 requestBody.setMqSet(mqs);
 
                 try {
-                    //请求broker获取指定消息队列的分布式锁
+                    //请求broker获取指定消息队列的分布式锁 该方法会返回本次成功锁定的消息消费队列
                     Set<MessageQueue> lockOKMQSet =
                         this.mQClientFactory.getMQClientAPIImpl().lockBatchMQ(findBrokerResult.getBrokerAddr(), requestBody, 1000);
 
                     for (MessageQueue mq : lockOKMQSet) {
                         ProcessQueue processQueue = this.processQueueTable.get(mq);
+                        //遍历本次成功锁定的队列来更新对应的ProcessQueue的locked状态，如果locked为false,则设置成true,并更新锁定时间。
                         if (processQueue != null) {
                             if (!processQueue.isLocked()) {
                                 log.info("the message queue locked OK, Group: {} {}", this.consumerGroup, mq);
@@ -467,6 +477,7 @@ public abstract class RebalanceImpl {
                  */
                 if (!mqSet.contains(mq)) {
                     pq.setDropped(true);
+                    //集群模式下 并且 是顺序消费 解除对队列的锁定
                     if (this.removeUnnecessaryMessageQueue(mq, pq)) {
                         it.remove();
                         changed = true;
@@ -503,11 +514,12 @@ public abstract class RebalanceImpl {
             if (!this.processQueueTable.containsKey(mq)) {
                 /**
                  * 如果是顺序消息 则需要向broker获取分布式锁
-                 * 如果获取锁失败 则该消息队列不属于自己 不能消费
+                 * 如果获取锁失败 则该消息队列不属于自己 本次负载周期不会进行消息拉取
                  *
                  *  lock(mq)：请求broker获取指定消息队列的分布式锁
+                 *  不同消费组的消费者可以同时锁定同一个消息消费队列，集群模式下同一个消费组内只能被一个消费者锁定
                  */
-                if (isOrder && !this.lock(mq)) {
+                if (isOrder && !this.lock(mq)) {//消息拉取时 如果是顺序消息，会判断当前消费者是否持有messagequeue的分布式锁
                     log.warn("doRebalance, {}, add a new mq failed, {}, because lock failed", consumerGroup, mq);
                     continue;
                 }

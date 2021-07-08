@@ -95,6 +95,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         final PullMessageRequestHeader requestHeader =
             (PullMessageRequestHeader) request.decodeCommandCustomHeader(PullMessageRequestHeader.class);
 
+        //标识响应对应的request(请求和响应是异步的)
         response.setOpaque(request.getOpaque());
 
         log.debug("receive PullMessage request command, {}", request);
@@ -408,7 +409,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
 
                     this.brokerController.getBrokerStatsManager().incBrokerGetNums(getMessageResult.getMessageCount());
                     //读取消息
-                    if (this.brokerController.getBrokerConfig().isTransferMsgByHeap()) {//内存中
+                    if (this.brokerController.getBrokerConfig().isTransferMsgByHeap()) {//是否通过堆内存传输数据
                         //获取消息内容到堆内存
                         final long beginTimeMills = this.brokerController.getMessageStore().now();
                         final byte[] r = this.readGetMessageResult(getMessageResult, requestHeader.getConsumerGroup(), requestHeader.getTopic(), requestHeader.getQueueId());
@@ -416,7 +417,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                             requestHeader.getTopic(), requestHeader.getQueueId(),
                             (int) (this.brokerController.getMessageStore().now() - beginTimeMills));
                         response.setBody(r);
-                    } else {//零拷贝
+                    } else {//nio读写
                         try {
                             FileRegion fileRegion =
                                 new ManyMessageTransfer(response.encodeHeader(getMessageResult.getBufferTotalSize()), getMessageResult);

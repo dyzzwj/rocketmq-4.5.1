@@ -308,7 +308,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             }
         } else {
             //顺序消息
-            if (processQueue.isLocked()) {
+            /**
+             * 如果处理队列未被锁定，则延迟拉取消息，也就说消息消费需要在ProceeQueue 队列被自己锁定的情况下才会拉取消息，
+             * 否则将 PullRequest 延迟3s再拉取。并且PullRequest 的初始拉取点在拉取时只在第一次拉取时设置
+             */
+            if (processQueue.isLocked()) { //负载均衡的时候 对于新增的messagequeue，如果是顺序消费 会去申请该messagequeue的分布式锁
                 if (!pullRequest.isLockedFirst()) {
                     //计算pull的offset
                     final long offset = this.rebalanceImpl.computePullFromWhere(pullRequest.getMessageQueue());
@@ -484,6 +488,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
             classFilter = sd.isClassFilterMode();
         }
 
+        //suspend:请求允许挂起
         //计算拉取消息系统标识 构建拉取消息系统Flag: 是否支持comitOffset,suspend,subExpression,classFilter
         int sysFlag = PullSysFlag.buildSysFlag(
             commitOffsetEnable, // commitOffset
