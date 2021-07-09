@@ -443,6 +443,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                      * 消息未查询到 && broker允许挂起请求 && 请求允许挂起
                      */
                     if (brokerAllowSuspend && hasSuspendFlag) {
+                        //计算本次拉取请求的最多挂起时间戳 到了该时间戳 就算没有新的message 也需要唤醒挂起请求
                         long pollingTimeMills = suspendTimeoutMillisLong;
                         if (!this.brokerController.getBrokerConfig().isLongPollingEnable()) {
                             pollingTimeMills = this.brokerController.getBrokerConfig().getShortPollingTimeMills();

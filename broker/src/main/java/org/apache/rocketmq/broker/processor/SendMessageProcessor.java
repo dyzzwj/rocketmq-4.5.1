@@ -154,7 +154,10 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             return response;
         }
 
-        //计算重试topic
+        /**
+         * 计算重试topic  重试topic是基于消费者组的
+         * 消息重试的消息主题是基于消费组
+         */
         String newTopic = MixAll.getRetryTopic(requestHeader.getGroup());
         //计算队列编号
         int queueIdInt = Math.abs(this.random.nextInt() % 99999999) % subscriptionGroupConfig.getRetryQueueNums();
@@ -208,6 +211,10 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         //如果消息的消费重试次数大于最大重新消费次数或则延迟级别小于0，修改消息的topic名称为%DLQ%，设置该主题的权限为只写，说明消息进入死信队列后将不再被消费
         if (msgExt.getReconsumeTimes() >= maxReconsumeTimes
             || delayLevel < 0) {
+            /**
+             *  死信topic是基于消费者组的
+             *  消息重试的消息主题是基于消费组
+             */
             newTopic = MixAll.getDLQTopic(requestHeader.getGroup());
             queueIdInt = Math.abs(this.random.nextInt() % 99999999) % DLQ_NUMS_PER_GROUP;
 

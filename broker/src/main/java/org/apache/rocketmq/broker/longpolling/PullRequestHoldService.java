@@ -131,10 +131,17 @@ public class PullRequestHoldService extends ServiceThread {
             if (2 == kArray.length) {
                 String topic = kArray[0];
                 int queueId = Integer.parseInt(kArray[1]);
-                //获取queue的最大offset
+                //获取queue的最新的最大offset
                 final long offset = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId);
                 try {
-                    //检查是否有需要通知的请求
+                    /**
+                     * 检查是否有需要通知的请求
+                     *  哪些情况会唤醒请求？
+                     *  1、有新的数据了
+                     *  2、超过挂起时间了（不能无限期挂起）
+                     *
+                     */
+
                     this.notifyMessageArriving(topic, queueId, offset);
                 } catch (Throwable e) {
                     log.error("check hold request failed. topic={}, queueId={}", topic, queueId, e);
