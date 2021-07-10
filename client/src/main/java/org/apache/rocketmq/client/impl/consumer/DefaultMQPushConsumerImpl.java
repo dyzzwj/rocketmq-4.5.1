@@ -694,12 +694,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 } else {
                     switch (this.defaultMQPushConsumer.getMessageModel()) {
                         case BROADCASTING:
-                            //广播 本地文件offset存储
+                            //广播 本地文件offset存储 既然每条消息要被每一个消费者消费，则消费进度可以与消费者保存在一起
+
                             this.offsetStore = new LocalFileOffsetStore(this.mQClientFactory, this.defaultMQPushConsumer.getConsumerGroup());
                             break;
                         case CLUSTERING:
                             //集群模式 远程brokeroffset存储
                             //Consumer 消费进度管理，负责从 Broker 获取消费进度，同步消费进度到 Broker。
+
                             this.offsetStore = new RemoteBrokerOffsetStore(this.mQClientFactory, this.defaultMQPushConsumer.getConsumerGroup());
                             break;
                         default:

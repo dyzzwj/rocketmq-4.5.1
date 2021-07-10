@@ -129,7 +129,7 @@ public class ScheduleMessageService extends ConfigManager {
                 if (null == offset) {
                     offset = 0L;
                 }
-                //16个延时级别，每个级别都有个定时器去扫描消息
+                //18个延时级别，每个级别都有个定时器去扫描消息
                 if (timeDelay != null) {
                     //启动定时任务
                     this.timer.schedule(new DeliverDelayedMessageTimerTask(level, offset), FIRST_DELAY_TIME);
@@ -177,7 +177,9 @@ public class ScheduleMessageService extends ConfigManager {
     }
 
     public boolean load() {
+        //加载持久化文件delayOffset.json 记录延迟级别处理到的offset
         boolean result = super.load();
+        //解析延迟级别 1-18对应各自的延迟间隔
         result = result && this.parseDelayLevel();
         return result;
     }
@@ -277,8 +279,9 @@ public class ScheduleMessageService extends ConfigManager {
          */
         private long correctDeliverTimestamp(final long now, final long deliverTimestamp) {
 
+            //到期时间戳
             long result = deliverTimestamp;
-
+            //如果当前时间 + 当前级别对应的延迟时间 < 存储消息时计算的可投递时间 那么存储消息时计算的可投递时间是有误的
             long maxTimestamp = now + ScheduleMessageService.this.delayLevelTable.get(this.delayLevel);
             if (deliverTimestamp > maxTimestamp) {
                 result = now;
@@ -333,7 +336,7 @@ public class ScheduleMessageService extends ConfigManager {
                             long countdown = deliverTimestamp - now;
                             //消息达到可发送时间
                             if (countdown <= 0) {
-                                // 因为cq是索引，取到cq，通过offsetPy和sizePy取获取真实的消息
+                                // 因为cq是索引，取到cq，通过offsetPy和sizePy从commitLog取获取真实的消息
                                 MessageExt msgExt =
                                     ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(
                                         offsetPy, sizePy);

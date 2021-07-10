@@ -192,6 +192,9 @@ public class DefaultMessageStore implements MessageStore {
          */
         this.reputMessageService = new ReputMessageService();
 
+        /**
+         * 延迟消息服务
+         */
         this.scheduleMessageService = new ScheduleMessageService(this);
 
         this.transientStorePool = new TransientStorePool(messageStoreConfig);
@@ -232,6 +235,7 @@ public class DefaultMessageStore implements MessageStore {
         try {
             boolean lastExitOK = !this.isTempFileExist();
             log.info("last shutdown {}", lastExitOK ? "normally" : "abnormally");
+
 
             if (null != scheduleMessageService) {
                 result = result && this.scheduleMessageService.load();
@@ -2017,7 +2021,7 @@ public class DefaultMessageStore implements MessageStore {
                             if (dispatchRequest.isSuccess()) {
                                 //读取成功
                                 if (size > 0) {
-                                    //构建consumequeue
+                                    //构建consumequeue和 index
                                     DefaultMessageStore.this.doDispatch(dispatchRequest);
                                     //这个是长轮询相关，后续会分析
                                     //通知有新消息

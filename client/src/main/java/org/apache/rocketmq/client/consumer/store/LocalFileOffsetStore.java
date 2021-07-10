@@ -39,15 +39,26 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
  * Local storage implementation
  *   广播模式下 使用本地文件消费进度
  *
+ *  广播模式下 如果消费失败，则丢弃(不发送会broker)
+ *
  */
 public class LocalFileOffsetStore implements OffsetStore {
+    //
     public final static String LOCAL_OFFSET_STORE_DIR = System.getProperty(
         "rocketmq.client.localOffsetStoreDir",
         System.getProperty("user.home") + File.separator + ".rocketmq_offsets");
     private final static InternalLogger log = ClientLogger.getLog();
+    /**
+     * // MQ客户端实例，该实例被同一个客户端的消费者、生产者共用
+     */
     private final MQClientInstance mQClientFactory;
+    //消费者组名称
     private final String groupName;
+    //具体的消费进度保存文件名
     private final String storePath;
+    /**
+     *内存中的 offfset 进度保持，以 MessageQueue 为键，偏移量为值
+     */
     private ConcurrentMap<MessageQueue, AtomicLong> offsetTable =
         new ConcurrentHashMap<MessageQueue, AtomicLong>();
 
@@ -62,7 +73,7 @@ public class LocalFileOffsetStore implements OffsetStore {
 
     @Override
     public void load() throws MQClientException {
-        //从本地硬盘读取消费进度
+        //从本地硬盘offsets.json读取消费进度
         OffsetSerializeWrapper offsetSerializeWrapper = this.readLocalOffset();
         if (offsetSerializeWrapper != null && offsetSerializeWrapper.getOffsetTable() != null) {
             offsetTable.putAll(offsetSerializeWrapper.getOffsetTable());

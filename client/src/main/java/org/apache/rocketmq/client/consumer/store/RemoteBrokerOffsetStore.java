@@ -40,11 +40,24 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
  * Remote storage implementation
  *  集群模式下 使用远程broker消费进度
  *
+ *  在集群模式下，多个消费者会负载到不同的消费队列上，因为消息消费进度是基于消息队列进行保存的，也就是不同的消费者之间的消费进度保存是不会存在并发的，
+ *  但是在同一个消费者，非顺序消息消费时，一个消费者（多个线程）并发消费消息，比如m1 < m2,,但m2先消费完，此时是如何保存的消费进度呢？
+ *  举个例子，如果m2的offset为5，而m1的offset为4，如果m2先消费完，保存进度为5，那m1消息消费完，保存进度为4，这样岂不乱来了，该如何处理呢？
  */
 public class RemoteBrokerOffsetStore implements OffsetStore {
     private final static InternalLogger log = ClientLogger.getLog();
+    /**
+     * // MQ客户端实例，该实例被同一个客户端的消费者、生产者共用
+     */
     private final MQClientInstance mQClientFactory;
+    /**
+     *  MQ消费组
+     */
     private final String groupName;
+
+    /**
+     * 消费进度存储（内存中）
+     */
     private ConcurrentMap<MessageQueue, AtomicLong> offsetTable =
         new ConcurrentHashMap<MessageQueue, AtomicLong>();
 
@@ -65,11 +78,13 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
         if (mq != null) {
             AtomicLong offsetOld = this.offsetTable.get(mq);
             if (null == offsetOld) {
+                //如果当前并没有存储该mq的offset,则把传入的offset放入内存中（map)。
                 offsetOld = this.offsetTable.putIfAbsent(mq, new AtomicLong(offset));
             }
-
+            //如果offsetOld不为空，这里如果不为空，说明同时对一个MQ消费队列进行消费，并发执行。
             if (null != offsetOld) {
                 if (increaseOnly) {
+                    //根据 increaseOnly 更新原先的 offsetOld 的值。
                     MixAll.compareAndIncreaseOnly(offsetOld, offset);
                 } else {
                     offsetOld.set(offset);
@@ -81,6 +96,7 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
     @Override
     public long readOffset(final MessageQueue mq, final ReadOffsetType type) {
         if (mq != null) {
+            //根据读取来源 读取消费队列的消费进度
             switch (type) {
                 case MEMORY_FIRST_THEN_STORE:
                 case READ_FROM_MEMORY: {
@@ -93,6 +109,7 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
                 }
                 case READ_FROM_STORE: {
                     try {
+                        //从broker获取消费进度
                         long brokerOffset = this.fetchConsumeOffsetFromBroker(mq);
                         AtomicLong offset = new AtomicLong(brokerOffset);
                         this.updateOffset(mq, offset.get(), false);
@@ -235,6 +252,8 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
 
     private long fetchConsumeOffsetFromBroker(MessageQueue mq) throws RemotingException, MQBrokerException,
         InterruptedException, MQClientException {
+
+        //查询broker地址
         FindBrokerResult findBrokerResult = this.mQClientFactory.findBrokerAddressInAdmin(mq.getBrokerName());
         if (null == findBrokerResult) {
 
@@ -247,7 +266,9 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
             requestHeader.setTopic(mq.getTopic());
             requestHeader.setConsumerGroup(this.groupName);
             requestHeader.setQueueId(mq.getQueueId());
-
+            /**
+             * 去broker上查询offset
+             */
             return this.mQClientFactory.getMQClientAPIImpl().queryConsumerOffset(
                 findBrokerResult.getBrokerAddr(), requestHeader, 1000 * 5);
         } else {

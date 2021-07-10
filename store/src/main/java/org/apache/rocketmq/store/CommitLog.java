@@ -348,7 +348,7 @@ public class CommitLog {
                         if (delayLevel > 0) {
                             //计算投递时间
                             /**
-                             * 如果 是延时消息 那么将tagsCode设置成时间戳
+                             * 如果 是延时消息 那么将tagsCode设置成到期时间戳
                              */
                             tagsCode = this.defaultMessageStore.getScheduleMessageService().computeDeliverTimestamp(delayLevel,
                                 storeTimestamp);

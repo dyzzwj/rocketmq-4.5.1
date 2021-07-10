@@ -56,6 +56,7 @@ public class ConsumerManageProcessor implements NettyRequestProcessor {
             case RequestCode.UPDATE_CONSUMER_OFFSET:
                 return this.updateConsumerOffset(ctx, request);
             case RequestCode.QUERY_CONSUMER_OFFSET:
+                //查询消费者offset
                 return this.queryConsumerOffset(ctx, request);
             default:
                 break;
@@ -128,6 +129,7 @@ public class ConsumerManageProcessor implements NettyRequestProcessor {
             (QueryConsumerOffsetRequestHeader) request
                 .decodeCommandCustomHeader(QueryConsumerOffsetRequestHeader.class);
 
+        //获取消费者消费topic下的messagequeue的offset
         long offset =
             this.brokerController.getConsumerOffsetManager().queryOffset(
                 requestHeader.getConsumerGroup(), requestHeader.getTopic(), requestHeader.getQueueId());
@@ -137,6 +139,7 @@ public class ConsumerManageProcessor implements NettyRequestProcessor {
             response.setCode(ResponseCode.SUCCESS);
             response.setRemark(null);
         } else {
+
             long minOffset =
                 this.brokerController.getMessageStore().getMinOffsetInQueue(requestHeader.getTopic(),
                     requestHeader.getQueueId());

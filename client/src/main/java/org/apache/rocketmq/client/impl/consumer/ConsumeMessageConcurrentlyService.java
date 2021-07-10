@@ -348,9 +348,18 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 break;
         }
 
-        //移除【消费成功】和【消费失败但发回Broker成功】 并更新最新消费进度
+
+        /**
+         *    移除【消费成功】和【消费失败但发回Broker成功】 并更新最新消费进度
+         */
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());
+        /**
+         * 更新消费进度
+         * 广播模式 - 消费进度存储在本地
+         * 集群模式 - 消费进度存储在broker
+         */
         if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
+            //更新消费进度
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), offset, true);
         }
     }

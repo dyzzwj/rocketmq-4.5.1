@@ -251,7 +251,7 @@ public class ProcessQueue {
     }
 
     /**
-     * 移除消息，并返回第一条消息队列位置
+     * 移除消息，移除自己本批消息后，处理队列中，还存在消息，则返回该处理队列中最小的偏移(第一条消息队列位置)
      * @param msgs
      * @return
      */
@@ -274,7 +274,13 @@ public class ProcessQueue {
                         }
                     }
                     msgCount.addAndGet(removedCnt);
-
+                    /**
+                     *  如果移除自己本批消息后，处理队列中，还存在消息，则返回该处理队列中最小的偏移量
+                     *  也就是此时返回的偏移量有可能不是消息本身的偏移量，而是处理队列中最小的偏移量。
+                     *
+                     *  优点：防止消息丢失（也就是没有消费到）。
+                     *  缺点：会造成消息重复消费
+                     */
                     if (!msgTreeMap.isEmpty()) {
                         result = msgTreeMap.firstKey();
                     }
