@@ -26,7 +26,7 @@ import org.apache.rocketmq.store.config.StorePathConfigHelper;
 
 public class ConsumeQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-
+    //每条消息在consumequeue中的大小
     public static final int CQ_STORE_UNIT_SIZE = 20;
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
@@ -40,7 +40,7 @@ public class ConsumeQueue {
     //队列id
     private final int queueId;
     private final ByteBuffer byteBufferIndex; // 写索引时用到的ByteBuffer
-
+    //默认路径为：rockemt_home/store/consume/ {topic} / {queryId}
     private final String storePath;
     private final int mappedFileSize;
     private long maxPhysicOffset = -1; // 最后一个消息对应的物理Offset
@@ -400,7 +400,7 @@ public class ConsumeQueue {
                         topic, queueId, request.getCommitLogOffset());
                 }
             }
-            //调用添加位置信息
+            //调用添加位置信息 写入consumequeue
             boolean result = this.putMessagePositionInfo(request.getCommitLogOffset(),
                 request.getMsgSize(), tagsCode, request.getConsumeQueueOffset());
             if (result) {
@@ -435,7 +435,12 @@ public class ConsumeQueue {
      */
     private boolean putMessagePositionInfo(final long offset, final int size, final long tagsCode,
         final long cqOffset) {
-
+        /**
+         * final long offset,commitLog偏移量
+         * final int size, 消息大小
+         * final long tagsCode,tagcode
+         * final long cqOffset 写入consumequeue的偏移量
+         */
         //如果已经重放过 直接返回成功
         if (offset + size <= this.maxPhysicOffset) {
             log.warn("Maybe try to build consume queue repeatedly maxPhysicOffset={} phyOffset={}", maxPhysicOffset, offset);
@@ -455,14 +460,15 @@ public class ConsumeQueue {
          * cqOffset：topic+queueId下的消息个数-1，所以，计算ConsumeQueue的物理位移的时候是=个数*大小
          */
         //计算consumeQueue存储位置，并获得对应的MappedFile
-        //物理位移 = 消息数 * 每个consumequeue的大小
+        //物理位移 = 写入consumequeue的偏移量 * 每个消息在consumequeue中的大小
         final long expectLogicOffset = cqOffset * CQ_STORE_UNIT_SIZE;
         //获取ConsumeQueue对应的MapedFile，没有则创建
         // 以前介绍过MapedFile是对文件的操作的封装，其对应一个磁盘上的ConsumeQueue文件
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile(expectLogicOffset);
         if (mappedFile != null) {
-            // 当是ConsumeQueue第一个MappedFile && 队列位置非第一个 && MappedFile未写入内容，则填充前置空白占位
+
             /**
+             * 当是ConsumeQueue第一个MappedFile && 队列位置非第一个 && MappedFile未写入内容，则填充前置空白占位
              * 什么场景下会需要。猜测产生的原因：一个 Topic 长期无消息产生，突然N天后进行发送，Topic 对应的历史消息以及和消费队列数据已经被清理，新生成的MappedFile需要前置占位。
              */
             if (mappedFile.isFirstCreateInQueue() && cqOffset != 0 && mappedFile.getWrotePosition() == 0) {

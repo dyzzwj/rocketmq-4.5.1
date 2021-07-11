@@ -187,6 +187,7 @@ public class AllocateMappedFileService extends ServiceThread {
                         mappedFile = new MappedFile(req.getFilePath(), req.getFileSize(), messageStore.getTransientStorePool());
                     }
                 } else {
+                    //直接创建
                     mappedFile = new MappedFile(req.getFilePath(), req.getFileSize());
                 }
 

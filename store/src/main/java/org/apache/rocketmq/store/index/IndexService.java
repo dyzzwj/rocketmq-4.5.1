@@ -219,13 +219,14 @@ public class IndexService {
                 case MessageSysFlag.TRANSACTION_PREPARED_TYPE:
                 case MessageSysFlag.TRANSACTION_COMMIT_TYPE:
                     break;
+                    //rollback事务消息不生成index
                 case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE:
                     return;
             }
 
             /**
              * 如果消息的UniqKey不为null，则先根据消息的topic和UniqKey构建出形如“topic # key”的index key，
-             * 然后使用putKey方法构建index信息，该方法的核心实现是putKey(final String key, final long phyOffset, final long storeTimestamp)
+             * 然后使用putKey方法构建index信息
              */
             if (req.getUniqKey() != null) {
                 indexFile = putKey(indexFile, msg, buildKey(topic, req.getUniqKey()));
