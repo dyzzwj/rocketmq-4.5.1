@@ -89,25 +89,35 @@ public class ConsumeQueue {
     }
 
     public void recover() {
+        //获取该消息队列的所有内存映射文件
         final List<MappedFile> mappedFiles = this.mappedFileQueue.getMappedFiles();
         if (!mappedFiles.isEmpty()) {
-
+            //只从倒数第三个文件开始
             int index = mappedFiles.size() - 3;
             if (index < 0)
                 index = 0;
-
+            //consumequeue 逻辑大小。
             int mappedFileSizeLogics = this.mappedFileSize;
+            //该queue对应的内存映射文件
             MappedFile mappedFile = mappedFiles.get(index);
+            //内存映射文件对应的ByteBuffer
             ByteBuffer byteBuffer = mappedFile.sliceByteBuffer();
+            //处理的 offset,默认从 consumequeue 中存放的第一个条目开始。
             long processOffset = mappedFile.getFileFromOffset();
             long mappedFileOffset = 0;
             long maxExtAddr = 1;
             while (true) {
+                //循环验证 consumeque 包含条目的有效性（如果offset大于0并且size大于0，则表示是一个有效的条目）
                 for (int i = 0; i < mappedFileSizeLogics; i += CQ_STORE_UNIT_SIZE) {
+                    //commitLog中的物理偏移量
                     long offset = byteBuffer.getLong();
+                    //消息大小
                     int size = byteBuffer.getInt();
+                    //tagcode
                     long tagsCode = byteBuffer.getLong();
 
+                    //如果 offset大于0并且size大于0，则表示是一个有效的条目，设置 consumequeue 中有效的 mappedFileOffset ，
+                    // 继续下一个条目的验证，如果发现不正常的条目，则跳出循环。
                     if (offset >= 0 && size > 0) {
                         mappedFileOffset = i + CQ_STORE_UNIT_SIZE;
                         this.maxPhysicOffset = offset + size;
@@ -120,7 +130,7 @@ public class ConsumeQueue {
                         break;
                     }
                 }
-
+                //如果该 consumeque 文件中所有条目全部有效，则继续验证下一个文件，（index++）,如果发现条目不合法，后面的文件不需要再检测。
                 if (mappedFileOffset == mappedFileSizeLogics) {
                     index++;
                     if (index >= mappedFiles.size()) {
@@ -143,13 +153,17 @@ public class ConsumeQueue {
             }
 
             processOffset += mappedFileOffset;
+            //processOffset 代表了当前 consuemque 有效的偏移量
             this.mappedFileQueue.setFlushedWhere(processOffset);
+            //设置 flushedWhere，committedWhere 为当前有效的偏移量
             this.mappedFileQueue.setCommittedWhere(processOffset);
+            //截断无效的consumeque文件。
             this.mappedFileQueue.truncateDirtyFiles(processOffset);
 
             if (isExtReadEnable()) {
                 this.consumeQueueExt.recover();
                 log.info("Truncate consume queue extend file by max {}", maxExtAddr);
+
                 this.consumeQueueExt.truncateByMaxAddress(maxExtAddr);
             }
         }
@@ -392,8 +406,10 @@ public class ConsumeQueue {
                 cqExtUnit.setMsgStoreTime(request.getStoreTimestamp());
                 cqExtUnit.setTagsCode(request.getTagsCode());
 
+                //返回tagscode的hashcode
                 long extAddr = this.consumeQueueExt.put(cqExtUnit);
                 if (isExtAddr(extAddr)) {
+                    //consumequeue存储的是tagscode的hash值
                     tagsCode = extAddr;
                 } else {
                     log.warn("Save consume queue extend fail, So just save tagsCode! {}, topic:{}, queueId:{}, offset:{}", cqExtUnit,

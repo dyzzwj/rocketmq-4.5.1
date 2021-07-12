@@ -160,13 +160,27 @@ public class PullMessageProcessor implements NettyRequestProcessor {
 
         SubscriptionData subscriptionData = null;
         ConsumerFilterData consumerFilterData = null;
-        if (hasSubscriptionFlag) {
+
+
+        /**
+         * RocketMQ: 消息过滤有两种模式
+         *
+         * 1、类过滤classFilterMode
+         * 2、表达式模式(Expression),其中表达式又分为 ExpressionType.TAG 和 ExpressionType.SQL92。
+         * TAG过滤，在broker选择消息时，会根据 ConsumeQueue 条目中存储的 tag hashcode 与订阅的 tag (hashcode 集合)进行匹配，
+         * 匹配成功则放入待返回消息结果中，然后在消息消费端（消费者，还会对消息的订阅消息字符串进行再一次过滤。为什么需要进行两次过滤呢？
+         * 为什么不在服务端直接对消息订阅 tag 进行匹配呢？主要就还是为了提高服务端消费消费队列（文件存储）的性能，
+         * 如果直接进行字符串匹配，那么 consumequeue 条目就无法设置为定长结构，检索 consuequeue 就不方便。
+         */
+        if (hasSubscriptionFlag) {//是否有子订阅模式，例如：consumer.subscribe("TopicTest", "TagB")。
             try {
                 //根据topic、消息过滤表达式构建订阅消息实体，如果不是TAG模式则构建过滤数据consumerFilterData
                 subscriptionData = FilterAPI.build(
                     requestHeader.getTopic(), requestHeader.getSubscription(), requestHeader.getExpressionType()
                 );
                 if (!ExpressionType.isTagType(subscriptionData.getExpressionType())) {
+                    //针对sql92
+
                     consumerFilterData = ConsumerFilterManager.build(
                         requestHeader.getTopic(), requestHeader.getConsumerGroup(), requestHeader.getSubscription(),
                         requestHeader.getExpressionType(), requestHeader.getSubVersion()
@@ -180,7 +194,12 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                 response.setRemark("parse the consumer's subscription failed");
                 return response;
             }
-        } else {
+        } else { //无子订阅模式
+            /**
+             * 走的是ClassFilter过滤模式，此时不是构建SubscriptionData,而是直接从brokerController.getConsumerFilterManager()
+             * 中根据 topic、consumerGroup或取，如果取不到直接提示错误，为什么会这样呢？
+             * 原来在调用subscribe(String topic, String fullClassName, String filterClassSource) 方法时，会创建相关的订阅信息
+             */
 
             ConsumerGroupInfo consumerGroupInfo =
                 this.brokerController.getConsumerManager().getConsumerGroupInfo(requestHeader.getConsumerGroup());
@@ -234,6 +253,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         }
 
         if (!ExpressionType.isTagType(subscriptionData.getExpressionType())
+                //如果消息过滤模式为 SQL92 ，则必须在broker端开启 enablePropertyFilter=true
             && !this.brokerController.getBrokerConfig().isEnablePropertyFilter()) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark("The broker does not support consumer to filter message by " + subscriptionData.getExpressionType());
@@ -242,7 +262,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
 
 
         MessageFilter messageFilter;
-        //构建消息过滤器
+        //根据是否可以重试broker、filterSupportRetry，创建 ExpressionForRetryMessageFilter、ExpressionMessageFilter 消息过滤器。
         if (this.brokerController.getBrokerConfig().isFilterSupportRetry()) {
             messageFilter = new ExpressionForRetryMessageFilter(subscriptionData, consumerFilterData,
                 this.brokerController.getConsumerFilterManager());

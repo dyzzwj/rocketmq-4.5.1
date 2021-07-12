@@ -235,6 +235,11 @@ public class DefaultMessageStore implements MessageStore {
         boolean result = true;
 
         try {
+
+            /**
+             * 判断 ${ROCKET_HOME}/storepath/abort 文件是否存在，如果文件存在，则返回true,否则返回false，这个文件的作用是什么呢？
+             * 原来，在DefaultMessageStore 启动时创建，在 shutdown 时删除，也就是如果该文件存在，说明不是正常的关闭
+             */
             boolean lastExitOK = !this.isTempFileExist();
             log.info("last shutdown {}", lastExitOK ? "normally" : "abnormally");
 
@@ -258,6 +263,7 @@ public class DefaultMessageStore implements MessageStore {
                 //加载index文件夹
                 this.indexService.load(lastExitOK);
 
+                //文件恢复
                 this.recover(lastExitOK);
 
                 log.info("load over, and the max phy offset = {}", this.getMaxPhyOffset());
@@ -559,8 +565,8 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public GetMessageResult getMessage(final String group, final String topic, final int queueId, final long offset,
-        final int maxMsgNums,
-        final MessageFilter messageFilter) {
+        final int maxMsgNums,//一次拉取消息条数，默认为32，可通过消费者设置 pullBatchSize ，这个参数和 consumeMessageBatchMaxSize=1 是有区别的。
+          final MessageFilter messageFilter) {
         if (this.shutdown) {
             log.warn("message store has shutdown, so getMessage is forbidden");
             return null;
@@ -596,6 +602,7 @@ public class DefaultMessageStore implements MessageStore {
 
             //校验offset
             if (maxOffset == 0) {
+                //队列中没有消息
                 status = GetMessageStatus.NO_MESSAGE_IN_QUEUE;
                 nextBeginOffset = nextOffsetCorrection(offset, 0);
             } else if (offset < minOffset) {
@@ -614,7 +621,7 @@ public class DefaultMessageStore implements MessageStore {
             } else {
                 //校验通过
                 //获得 映射Buffer结果(MappedFile)
-                //消息索引
+                //获取offset所在的consumequeue
                 SelectMappedBufferResult bufferConsumeQueue = consumeQueue.getIndexBuffer(offset);
                 if (bufferConsumeQueue != null) {
                     try {
@@ -626,20 +633,20 @@ public class DefaultMessageStore implements MessageStore {
                         long maxPhyOffsetPulling = 0;
 
                         int i = 0;
-                        //一次拉取最大消息条数为16000 和 消费组传递的 maxMsgNums * 20 中的较大值
+                        //最大过滤消息字节数，是16000 和 消费组传递的 maxMsgNums * 20 中的较大值
                         final int maxFilterMessageCount = Math.max(16000, maxMsgNums * ConsumeQueue.CQ_STORE_UNIT_SIZE);
                         final boolean diskFallRecorded = this.messageStoreConfig.isDiskFallRecorded();
                         ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
                         //循环获取 消息位置信息
                         for (; i < bufferConsumeQueue.getSize() && i < maxFilterMessageCount; i += ConsumeQueue.CQ_STORE_UNIT_SIZE) {
-                            //读索引文件
+                            //解析一条消息
                             //读取消息在commmitLog中存储位置
                             long offsetPy = bufferConsumeQueue.getByteBuffer().getLong();
                             //消息长度
                             int sizePy = bufferConsumeQueue.getByteBuffer().getInt();
                             //消息tags code
                             long tagsCode = bufferConsumeQueue.getByteBuffer().getLong();
-                            //设置消息物理位置拉取到的最大offset
+                            //当前拉取的物理偏移量
                             maxPhyOffsetPulling = offsetPy;
 
                             if (nextPhyFileStartOffset != Long.MIN_VALUE) {
@@ -668,6 +675,7 @@ public class DefaultMessageStore implements MessageStore {
                                 }
                             }
                             //consumessage文件匹配
+                            //执行消息过滤，如果符合过滤条件。则直接进行下一条的拉取，如果不符合过滤条件，则进入继续执行，并如果最终符合条件，则将该消息添加到拉取结果中
                             if (messageFilter != null
                                 && !messageFilter.isMatchedByConsumeQueue(isTagsCodeLegal ? tagsCode : null, extRet ? cqExtUnit : null)) {
                                 if (getResult.getBufferTotalSize() == 0) {
@@ -685,10 +693,14 @@ public class DefaultMessageStore implements MessageStore {
                                 if (getResult.getBufferTotalSize() == 0) {
                                     status = GetMessageStatus.MESSAGE_WAS_REMOVING;
                                 }
-                                //计算下一个MappedFile的起始位置
+                                //如果该偏移量没有找到正确的消息，则说明已经到文件末尾了，下一次切换到下一个 commitlog 文件读取。 计算下一个MappedFile的起始位置
                                 nextPhyFileStartOffset = this.commitLog.rollNextFile(offsetPy);
                                 continue;
                             }
+                            /**
+                             * 从commitlog（全量消息）再次过滤，consumeque 中只能处理 TAG 模式的过滤，
+                             * SQL92 这种模式无法过滤，因为SQL92 需要依赖消息中的属性，故在这里再做一次过滤。如果消息符合条件，则加入到拉取结果中
+                             */
                             if (messageFilter != null
                                 && !messageFilter.isMatchedByCommitLog(selectResult.getByteBuffer().slice(), null)) {
                                 if (getResult.getBufferTotalSize() == 0) {
@@ -707,7 +719,7 @@ public class DefaultMessageStore implements MessageStore {
                             status = GetMessageStatus.FOUND;
                             nextPhyFileStartOffset = Long.MIN_VALUE;
                         }
-                        //统计剩余可拉取消息字节数
+                        //  diskFallRecorded，是否记录磁盘活动图，默认为false。
                         if (diskFallRecorded) {
                             long fallBehind = maxOffsetPy - maxPhyOffsetPulling;
                             brokerStatsManager.recordDiskFallBehindSize(group, topic, queueId, fallBehind);
@@ -720,6 +732,7 @@ public class DefaultMessageStore implements MessageStore {
                         long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE
                             * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
                         /**
+                         *  如果当前commitlog中的偏移量 - 当前最大拉取消息偏移量 > 允许消息在内存中存在大小时，建议下一次拉取任务从从节点拉取。
                          * 根据剩余可拉取消息字节数与内存判断是否建议读取从节点
                          */
                         getResult.setSuggestPullingFromSlave(diff > memory);
@@ -749,6 +762,7 @@ public class DefaultMessageStore implements MessageStore {
         this.storeStatsService.setGetMessageEntireTimeMax(eclipseTime);
         //设置返回结果
         getResult.setStatus(status);
+        //设置下一次拉取偏移量
         getResult.setNextBeginOffset(nextBeginOffset);
         getResult.setMaxOffset(maxOffset);
         getResult.setMinOffset(minOffset);
@@ -1284,6 +1298,7 @@ public class DefaultMessageStore implements MessageStore {
      */
     private long nextOffsetCorrection(long oldOffset, long newOffset) {
         long nextOffset = oldOffset;
+        //因为考虑到主从同步延迟的因素，导致从节点consumequeue并没有同步到数据。offsetCheckInSlave设置为false保险点，当然默认该值为false
         if (this.getMessageStoreConfig().getBrokerRole() != BrokerRole.SLAVE || this.getMessageStoreConfig().isOffsetCheckInSlave()) {
             nextOffset = newOffset;
         }
@@ -1297,6 +1312,8 @@ public class DefaultMessageStore implements MessageStore {
      * @return
      */
     private boolean checkInDiskByCommitOffset(long offsetPy, long maxOffsetPy) {
+        //accessMessageInMemoryMaxRatio:消息存储在物理内存中占用的最大比例，memory = 物理内存 * 这个比例，
+        // 如果 maxOffsetPy-offsetPy > memory 的话，说明 offsetPy 这个偏移量的消息已经从内存中置换到磁盘中了。
         long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
         return (maxOffsetPy - offsetPy) > memory;
     }
@@ -1315,6 +1332,7 @@ public class DefaultMessageStore implements MessageStore {
     private boolean isTheBatchFull(int sizePy, int maxMsgNums, int bufferTotal, int messageTotal, boolean isInDisk) {
 
         if (0 == bufferTotal || 0 == messageTotal) {
+            //如果 bufferTotal 和messageTotal 都等于0，显然本次拉取任务才刚开始，本批拉取任务未完成，返回 false
             return false;
         }
 
@@ -1325,6 +1343,10 @@ public class DefaultMessageStore implements MessageStore {
 
         // 根据消息存储配置的最大传输字节数、最大传输消息数是否已满
         if (isInDisk) {
+            //如果该消息存在于磁盘而不是内存中：如果已拉取消息字节数 + 待拉取消息的长度 > maxTransferBytesOnMessageInDisk
+            //(MessageStoreConfig)，默认64K，则不继续拉取该消息，返回拉取任务结束。如果已拉取消息条数 > maxTransferCountOnMessageInDisk (MessageStoreConfig)默认为8，
+            // 也就是，如果消息存在于磁盘中，一次拉取任务最多拉取8条
+
             if ((bufferTotal + sizePy) > this.messageStoreConfig.getMaxTransferBytesOnMessageInDisk()) {
                 return true;
             }
@@ -1333,6 +1355,7 @@ public class DefaultMessageStore implements MessageStore {
                 return true;
             }
         } else {
+            //如果该消息存在于内存中，对应的参数为maxTransferBytesOnMessageInMemory、maxTransferCountOnMessageInMemory，其逻辑与上述一样。
             if ((bufferTotal + sizePy) > this.messageStoreConfig.getMaxTransferBytesOnMessageInMemory()) {
                 return true;
             }
@@ -1470,14 +1493,17 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private void recover(final boolean lastExitOK) {
+        //恢复consumequeue
         long maxPhyOffsetOfConsumeQueue = this.recoverConsumeQueue();
 
         if (lastExitOK) {
+            //正常退出 正常赐福
             this.commitLog.recoverNormally(maxPhyOffsetOfConsumeQueue);
         } else {
+            //异常退出 异常修复
             this.commitLog.recoverAbnormally(maxPhyOffsetOfConsumeQueue);
         }
-
+        //修复主题队列
         this.recoverTopicQueueTable();
     }
 
@@ -1504,6 +1530,7 @@ public class DefaultMessageStore implements MessageStore {
         long maxPhysicOffset = -1;
         for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
             for (ConsumeQueue logic : maps.values()) {
+
                 logic.recover();
                 if (logic.getMaxPhysicOffset() > maxPhysicOffset) {
                     maxPhysicOffset = logic.getMaxPhysicOffset();

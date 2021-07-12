@@ -29,6 +29,18 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 
+
+/**
+ *
+ * 1、MappedFileQueue 与MappedFile的关系
+ * 可以这样认为，MappedFile 代表一个个物理文件，而 MappedFileQueue 代表由一个个 MappedFile 组成的一个连续逻辑的大文件。
+ * 并且每一个 MappedFile 的命名已该文件在整个文件序列中的偏移量来表示
+ *
+ * 2、MappedFileQueue   commit与flush的区别？
+ * 1）flushedWhere: 整个刷新的偏移量，针对该MappedFileQueue。
+ * 2）committedWhere:当前提交的偏移量，针对该MappedFileQueue
+
+ */
 public class MappedFileQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
@@ -36,7 +48,7 @@ public class MappedFileQueue {
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
     /**
-     * 存储目录
+     * 文件存储路径
      */
     private final String storePath;
 
@@ -56,11 +68,11 @@ public class MappedFileQueue {
     private final AllocateMappedFileService allocateMappedFileService;
 
     /**
-     * 刷盘指针 b表示指针之前的数据q全部持久化到磁盘
+     * 刷盘指针 表示指针之前的数据全部持久化到磁盘
      */
     private long flushedWhere = 0;
     /**
-     * 当前数据提交指针 ne内存中bytebuffer当前的写指针，该值大于等于flushedWhere
+     * 当前数据提交指针 内存中bytebuffer当前的写指针，该值大于等于flushedWhere
      */
     private long committedWhere = 0;
 
@@ -122,6 +134,9 @@ public class MappedFileQueue {
     public void truncateDirtyFiles(long offset) {
         List<MappedFile> willRemoveFiles = new ArrayList<MappedFile>();
 
+        //,如果无效的 offset 大于 该 consumeque,则无需处理。
+
+        //如果无效的 offset 小于该文件最大的偏移量，如果 consumequeue 的 offset 大于失效的 offset,则该文件整个删除，如果否，则设置 wrotePosition,commitedPosition,flushedPoisition 的值即可。
         for (MappedFile file : this.mappedFiles) {
             long fileTailOffset = file.getFileFromOffset() + this.mappedFileSize;
             if (fileTailOffset > offset) {
@@ -494,10 +509,15 @@ public class MappedFileQueue {
      */
     public boolean commit(final int commitLeastPages) {
         boolean result = true;
+        //根据committedWhere找到具体的mappedfile
+        //MappedFileQueue 代表由一个个 MappedFile 组成的一个连续逻辑的大文件
         MappedFile mappedFile = this.findMappedFileByOffset(this.committedWhere, this.committedWhere == 0);
         if (mappedFile != null) {
+            //commit 返回当前mappedfile commit的偏移量
             int offset = mappedFile.commit(commitLeastPages);
+            //加上该文件开始的偏移，表示 MappedFileQueue 当前的提交偏移量
             long where = mappedFile.getFileFromOffset() + offset;
+            //如果 result = true,则可以认为 MappedFile#commit 本次并没有执行 commit 操作
             result = where == this.committedWhere;
             this.committedWhere = where;
         }

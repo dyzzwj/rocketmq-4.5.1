@@ -59,17 +59,24 @@ public class ExpressionMessageFilter implements MessageFilter {
 
     @Override
     public boolean isMatchedByConsumeQueue(Long tagsCode, ConsumeQueueExt.CqExtUnit cqExtUnit) {
+        /**
+         * 如果 subscriptionData = null 说明此模式不是 Expression模式，直接返回true,表示匹配信息，
+         * 这里的 Expression模式，也就是非ClassFilterMode,包含TAG,SQL92 表达式。
+         */
         if (null == subscriptionData) {
             return true;
         }
 
+        /**
+         * 如果 classFilterMode, 直接返回 true，这里也表明，isMatchedByConsumeQueue 不处理class filter mode
+         */
         if (subscriptionData.isClassFilterMode()) {
             return true;
         }
 
         // by tags code.
         if (ExpressionType.isTagType(subscriptionData.getExpressionType())) {
-
+            //如果是 TAG 模式，只需要比对 tag 的 hashcode, 因为 consumequeue只包含了tag hashcode。
             if (tagsCode == null) {
                 return true;
             }
@@ -116,18 +123,25 @@ public class ExpressionMessageFilter implements MessageFilter {
 
     @Override
     public boolean isMatchedByCommitLog(ByteBuffer msgBuffer, Map<String, String> properties) {
+        //subscriptionData 如果为空，表示过滤模式为classfilter。
         if (subscriptionData == null) {
             return true;
         }
 
+        //isClassFilterMode 如果为true,表示过滤模式为 classFilter, 直接返回true。
         if (subscriptionData.isClassFilterMode()) {
             return true;
         }
 
+        //如果模式为TAG,直接返回true。
         if (ExpressionType.isTagType(subscriptionData.getExpressionType())) {
             return true;
         }
 
+        /**
+         * 从这里可以说明 isMatchedByCommitLog 只为 ExpressionType.SQL92 服务。
+         * 为什么 SQL92 是基于 SQL 表达式，但里面的属性来源于消息体，故需要从 commitlog中解析消息体，并得到tag,然后进行匹配。
+         */
         ConsumerFilterData realFilterData = this.consumerFilterData;
         Map<String, String> tempProperties = properties;
 

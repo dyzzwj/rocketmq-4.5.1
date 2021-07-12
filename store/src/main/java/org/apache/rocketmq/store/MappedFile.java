@@ -62,22 +62,25 @@ public class MappedFile extends ReferenceResource {
      */
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
     /**
-     * 已经提交(持久化)的位置  内存映射文件的提交指针
+     * 已经提交(持久化)的位置  内存映射文件的提交指针 应满足：commitedPosition >= flushedPosition。
      */
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
     /**
-     * 来维持刷盘的最新位置 该位置之前的数据都持久化到磁盘中红
+     * 来维持刷盘的最新位置 该位置之前的数据都持久化到磁盘中
      */
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
+    //单个文件的大小
     protected int fileSize;
     //文件通道
     protected FileChannel fileChannel;
     /**
      *  堆外内存 如果不为空 数据首先存储在writebuffer中 然后提交到mappedfile对应的内存映射文件buffer
+     *  写入buffer，如果开启了 transientStorePoolEnable 时不为空，writeBuffer 使用堆外内存，消息先进入到堆外内存中。
      */
     protected ByteBuffer writeBuffer = null;
     /**
      * 堆外内存池 该内存池中的内存会提供内存锁定机制
+     *
      */
     protected TransientStorePool transientStorePool = null;
     private String fileName;
@@ -358,9 +361,16 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * commit的作用就是将writeBuffer 中的数据提交到FileChannel中
-     * commitLeastPages：本次提交最小的頁面
+     * commitLeastPages：本次提交最小的页数
      */
     public int commit(final int commitLeastPages) {
+        //commitLeastPages 至少提交的页数，如果当前需要提交的数据所占的页数小于 commitLeastPages ，则不执行本次提交操作。
+
+        /**
+         * 如果 writeBuffer 等于null,则表示 IO 操作都是直接基于 FileChannel,所以此时返回当前可写的位置,
+         * 作为committedPosition 即可，这里应该就有点 commit 是个啥意思了。如果数据先写入到 writeBuffer 中，
+         * 则需要提交到FileChannel(MappedByteBuffer mappedByteBuffer)
+         */
         if (writeBuffer == null) {
             //no need to commit data to file channel, so just regard wrotePosition as committedPosition.
             return this.wrotePosition.get();
@@ -374,6 +384,7 @@ public class MappedFile extends ReferenceResource {
              */
 
             if (this.hold()) {
+                //提交
                 commit0(commitLeastPages);
                 this.release();
             } else {
@@ -401,11 +412,16 @@ public class MappedFile extends ReferenceResource {
         if (writePos - this.committedPosition.get() > 0) {
             try {
                 //设置需要写入的bytebuffer
+                //这里使用 slice 方法，主要是用的同一片内存空间，但单独的指针。
                 ByteBuffer byteBuffer = writeBuffer.slice();
                 byteBuffer.position(lastCommittedPosition);
                 byteBuffer.limit(writePos);
                 this.fileChannel.position(lastCommittedPosition);
                 //写入fileChannel
+                /**
+                 * 将 bytebuf 当前 上一次 commitedPosition + 当前写位置这些数据全部写入到 FileChannel中，
+                 * commit 的作用原来是将writeBuffer 中的数据写入到 FileChannel 中。
+                 */
                 this.fileChannel.write(byteBuffer);
                 //设置position
                 this.committedPosition.set(writePos);
@@ -451,6 +467,13 @@ public class MappedFile extends ReferenceResource {
     protected boolean isAbleToCommit(final int commitLeastPages) {
         int flush = this.committedPosition.get();
         int write = this.wrotePosition.get();
+
+        /**
+         * 是否能够commit。满足如下条件任意条件：
+         * 1. 映射文件已经写满
+         * 2. 有最小提交页数要求 commitLeastPages > 0 && 未commit部分超过commitLeastPages
+         * 3. 没有最新提交页数要求commitLeastPages = 0 && 有新写入部分
+         */
 
         if (this.isFull()) {
             return true;

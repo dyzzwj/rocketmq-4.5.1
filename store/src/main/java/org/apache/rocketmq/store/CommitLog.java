@@ -429,6 +429,7 @@ public class CommitLog {
             // Looking beginning to recover from which file
             int index = mappedFiles.size() - 1;
             MappedFile mappedFile = null;
+            //从最后一个文件开始检测，先找到第一个正常的 commitlog 文件，然后从该文件开始去恢复
             for (; index >= 0; index--) {
                 mappedFile = mappedFiles.get(index);
                 if (this.isMappedFileMatchedRecover(mappedFile)) {
@@ -446,6 +447,7 @@ public class CommitLog {
             long processOffset = mappedFile.getFileFromOffset();
             long mappedFileOffset = 0;
             while (true) {
+                //创建转发对象，该方法在消费队列，Index索引文件存储上篇已分析过。
                 DispatchRequest dispatchRequest = this.checkMessageAndReturnSize(byteBuffer, checkCRCOnRecover);
                 int size = dispatchRequest.getMsgSize();
 
@@ -456,6 +458,7 @@ public class CommitLog {
 
                         if (this.defaultMessageStore.getMessageStoreConfig().isDuplicationEnable()) {
                             if (dispatchRequest.getCommitLogOffset() < this.defaultMessageStore.getConfirmOffset()) {
+                                //转发给对象，会同步更新consumequeue,index文件
                                 this.defaultMessageStore.doDispatch(dispatchRequest);
                             }
                         } else {
@@ -485,7 +488,7 @@ public class CommitLog {
                     break;
                 }
             }
-
+            //检测到非法的 commitlog 时，停止恢复，然后设置 commitlog 的检测点，然后删除多于的不符合格式的文件。
             processOffset += mappedFileOffset;
             this.mappedFileQueue.setFlushedWhere(processOffset);
             this.mappedFileQueue.setCommittedWhere(processOffset);
@@ -508,7 +511,15 @@ public class CommitLog {
 
     private boolean isMappedFileMatchedRecover(final MappedFile mappedFile) {
         ByteBuffer byteBuffer = mappedFile.sliceByteBuffer();
-
+        /**
+         * 判断一个文件是否正常，主要是如下几个条件：
+         *
+         * 1、魔数正确
+         *
+         * 2、消息存储时间不为0
+         *
+         * 3、存储时间小于等于检测点(checkpoint)
+         */
         int magicCode = byteBuffer.getInt(MessageDecoder.MESSAGE_MAGIC_CODE_POSTION);
         if (magicCode != MESSAGE_MAGIC_CODE) {
             return false;
@@ -990,7 +1001,7 @@ public class CommitLog {
         public void run() {
             CommitLog.log.info(this.getServiceName() + " service started");
             while (!this.isStopped()) {
-                //数据刷新到filechannel周期 m默认为200ms
+                //数据刷新到filechannel周期 默认为200ms
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitIntervalCommitLog();
                 //一次提交任务至少包含的页数 4页
                 int commitDataLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getCommitCommitLogLeastPages();
@@ -1017,7 +1028,7 @@ public class CommitLog {
                         this.lastCommitTimestamp = end; // result = false means some data committed.
                         //now wake up flush thread.
                         /**
-                         * 唤醒FlushCommitLogService进行刷盘操作 FF
+                         * 唤醒FlushCommitLogService进行刷盘操作
                          */
                         flushCommitLogService.wakeup();
                     }
@@ -1067,7 +1078,7 @@ public class CommitLog {
             while (!this.isStopped()) {
                 //默认为false 表示await方法等待 为true时表示调用Thread.sleep等待
                 boolean flushCommitLogTimed = CommitLog.this.defaultMessageStore.getMessageStoreConfig().isFlushCommitLogTimed();
-                //刷盘周期 默认为500ms
+                //刷盘间隔 默认为500ms
                 int interval = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushIntervalCommitLog();
                 //每次刷盘至少要刷多少页内容  每页大小为4k 默认每次要刷4页
                 int flushPhysicQueueLeastPages = CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushCommitLogLeastPages();
@@ -1086,6 +1097,7 @@ public class CommitLog {
                     this.lastFlushTimestamp = currentTimeMillis;
                     //如果已经超时 将flushPhysicQueueLeastPages设置为0 表示将所有内存缓存全部刷到文件中
                     flushPhysicQueueLeastPages = 0;
+                    //每隔10次输出异常刷新进度
                     printFlushProgress = (printTimes++ % 10) == 0;
                 }
 
@@ -1105,9 +1117,11 @@ public class CommitLog {
                     }
 
                     long begin = System.currentTimeMillis();
+                    //刷盘
                     CommitLog.this.mappedFileQueue.flush(flushPhysicQueueLeastPages);
                     long storeTimestamp = CommitLog.this.mappedFileQueue.getStoreTimestamp();
                     if (storeTimestamp > 0) {
+                        //设置检测点的StoreCheckpoint 的physicMsgTimestamp（commitlog文件的检测点，也就是记录最新刷盘的时间戳）
                         CommitLog.this.defaultMessageStore.getStoreCheckpoint().setPhysicMsgTimestamp(storeTimestamp);
                     }
                     long past = System.currentTimeMillis() - begin;
