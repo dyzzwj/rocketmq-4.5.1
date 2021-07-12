@@ -18,6 +18,8 @@ public class SyncProducer {
 
     public static void main(String[] args) throws Exception {
 
+
+
         //1、创建生产者 并指定生产者组
         DefaultMQProducer producer = new DefaultMQProducer("producer-1");
 

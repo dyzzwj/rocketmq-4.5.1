@@ -164,6 +164,7 @@ public class IndexService {
             this.readWriteLock.readLock().lock();
             if (!this.indexFileList.isEmpty()) {
                 for (int i = this.indexFileList.size(); i > 0; i--) {
+                    //获取最后一个index文件
                     IndexFile f = this.indexFileList.get(i - 1);
                     boolean lastFile = i == this.indexFileList.size();
                     if (lastFile) {
@@ -172,7 +173,7 @@ public class IndexService {
                     }
 
                     if (f.isTimeMatched(begin, end)) {
-
+                        //时间匹配上了
                         f.selectPhyOffset(phyOffsets, buildKey(topic, key), maxNum, begin, end, lastFile);
                     }
 
