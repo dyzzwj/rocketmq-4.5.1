@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * 消费者模式：负载均衡模式（默认） 广播模式
  */
-public class Consumer {
+public class PushConsumer {
 
     public static void main(String[] args) throws Exception {
 
@@ -31,8 +31,7 @@ public class Consumer {
          */
         //1、创建消费者 指定消费者组
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("consumer-1-0");
-        DefaultMQPullConsumer consumer1 = new DefaultMQPullConsumer("");
-        consumer1.start();
+
         //2、指定nameserver
         consumer.setNamesrvAddr("localhost:9876;localhost:9877");
         //3、订阅topic、tag

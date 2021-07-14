@@ -639,11 +639,13 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
                 //获取或创建mqclient 每个消费者都对应一个client
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQPullConsumer, this.rpcHook);
 
+                //填充 rebalanceImpl 对象的消费组、消息队列分配器、消费模式。
                 this.rebalanceImpl.setConsumerGroup(this.defaultMQPullConsumer.getConsumerGroup());
                 this.rebalanceImpl.setMessageModel(this.defaultMQPullConsumer.getMessageModel());
                 this.rebalanceImpl.setAllocateMessageQueueStrategy(this.defaultMQPullConsumer.getAllocateMessageQueueStrategy());
                 this.rebalanceImpl.setmQClientFactory(this.mQClientFactory);
 
+                //构建 PullAPIWrapper 对象，该对象封装了具体拉取消息的逻辑，PULL,PUSH 模式最终都会调用 PullAPIWrapper 类的方法从 Broker 拉取消息
                 this.pullAPIWrapper = new PullAPIWrapper(
                     mQClientFactory,
                     this.defaultMQPullConsumer.getConsumerGroup(), isUnitMode());
@@ -749,6 +751,7 @@ public class DefaultMQPullConsumerImpl implements MQConsumerInner {
 
     private void copySubscription() throws MQClientException {
         try {
+            //根据注册的主题，构建订阅信息，放入到RebalanceImpl的订阅表中。
             Set<String> registerTopics = this.defaultMQPullConsumer.getRegisterTopics();
             if (registerTopics != null) {
                 for (final String topic : registerTopics) {

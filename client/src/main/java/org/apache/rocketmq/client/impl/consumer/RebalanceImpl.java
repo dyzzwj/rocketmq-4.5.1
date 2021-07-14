@@ -417,7 +417,13 @@ public abstract class RebalanceImpl {
                             "rebalanced result changed. allocateMessageQueueStrategyName={}, group={}, topic={}, clientId={}, mqAllSize={}, cidAllSize={}, rebalanceResultSize={}, rebalanceResultSet={}",
                             strategy.getName(), consumerGroup, topic, this.mQClientFactory.getClientId(), mqSet.size(), cidAll.size(),
                             allocateResultSet.size(), allocateResultSet);
-                        //如果rebalance队列发生变化
+                        //
+                        /**
+                         *  如果rebalance队列发生变化  PUSH模式和PULL模式对应不同的处理
+                         *  RebalancePullImpl#messageQueueChanged()：回调消费者注册的监听器
+                         *  RebalancePushImpl#messageQueueChanged()：给broker发送心跳（通知所有的broker）
+                         *
+                         */
                         this.messageQueueChanged(topic, mqSet, allocateResultSet);
                     }
                 }
@@ -549,7 +555,11 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-        //将PullRequest添加到pullRequestQueue，并唤醒PullMessageService线程
+        /**
+         *
+         * PUSH模式的实现类RebalancePushImpl.dispatchPullRequest：将PullRequest添加到pullRequestQueue，并唤醒PullMessageService线程
+         * PULL模式的实现类RebalancePullImpl#dispatchPullRequest()：什么都没做
+         */
         this.dispatchPullRequest(pullRequestList);
 
         return changed;
