@@ -15,6 +15,5 @@ public class Main {
         Period period = Period.between(start, end);
         System.out.println(period.getDays());
 
-
     }
 }

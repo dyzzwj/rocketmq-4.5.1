@@ -988,6 +988,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     }
 
     public void subscribe(String topic, String subExpression) throws MQClientException {
+
         try {
             //创建订阅数据
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
@@ -1004,14 +1005,18 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
     }
 
     public void subscribe(String topic, String fullClassName, String filterClassSource) throws MQClientException {
+        //topic : 主题，fullClassName ： 过滤类全类路径名，filterClassSource： 过滤类内容
         try {
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
                 topic, "*");
             subscriptionData.setSubString(fullClassName);
+            //设置 classFilterMode 为 true,表示类过滤机制
             subscriptionData.setClassFilterMode(true);
+            //将该主题的订阅信息放入到 RebalanceImp l对象中，一个消费者各自维护一个 RebalanceImpl 对象，用于创建消息拉取任务
             subscriptionData.setFilterClassSource(filterClassSource);
             this.rebalanceImpl.getSubscriptionInner().put(topic, subscriptionData);
             if (this.mQClientFactory != null) {
+                //发送心跳到所有Broker。
                 this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
             }
 
