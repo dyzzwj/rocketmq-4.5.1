@@ -95,8 +95,10 @@ public class PullRequestHoldService extends ServiceThread {
 
                 //根据长轮训还是短轮训设置等待时间
                 if (this.brokerController.getBrokerConfig().isLongPollingEnable()) {
+                    //如果开启了长轮询模式，则每次只挂起 5s，然后就去尝试拉取。
                     this.waitForRunning(5 * 1000);
                 } else {
+                    //如果不开启长轮询模式，则只挂起一次，挂起时间为 shortPollingTimeMills
                     this.waitForRunning(this.brokerController.getBrokerConfig().getShortPollingTimeMills());
                 }
 
@@ -137,7 +139,7 @@ public class PullRequestHoldService extends ServiceThread {
                     /**
                      * 检查是否有需要通知的请求
                      *  哪些情况会唤醒请求？
-                     *  1、有新的数据了
+                     *  1、有新的数据了（最新的offset > 拉取请求的offset）
                      *  2、超过挂起时间了（不能无限期挂起）
                      *
                      */
@@ -207,7 +209,8 @@ public class PullRequestHoldService extends ServiceThread {
                         }
                         continue;
                     }
-                    //不符合z再次拉取的请求 在添加回去
+                    //不符合再次拉取的请求 在添加回去
+                    //如果待拉取偏移量大于消息消费队列最大偏移量，并且未超时，调用 mpr.addPullRequest(replayList) 将拉取任务重新放入，待下一次检测。
                     replayList.add(request);
                 }
 
