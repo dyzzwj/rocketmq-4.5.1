@@ -493,7 +493,16 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                 /**
                  * 如果是广播模式的话，直接进入消费，无需锁定处理对列，因为相互直接无竞争
                  *  如果是集群模式，能消费消息 的前提条件就是必须proceessQueue被锁定并且锁未超时
-                 * 会不会出现这样一种情况：发生消息队列重新负载时，原先由自己处理的消息队列被另外一个消费者分配，此时如果还未来的及将ProceeQueue解除锁定，就被另外一个消费者添加进去，此时会存储多个消息消费者同时消费个消息队列，答案是不会的，因为当一个新的消费队列分配给消费者时，在添加其拉取任务之前必须先向Broker发送对该消息队列加锁请求，只有加锁成功后，才能添加拉取消息，否则等到下一次负载后，该消费队列被原先占有的解锁后，才能开始新的拉取任务。集群模式下，如果未锁定处理队列，则延迟该队列的消息消费。
+                 */
+
+                /**
+                 *    *
+                 *
+                 *   会不会出现这样一种情况：发生消息队列重新负载时，原先由自己处理的消息队列被另外一个消费者分配，
+                 *   此时如果还未来的及将ProceeQueue解除锁定，就被另外一个消费者添加进去，此时会存储多个消息消费者同时消费个消息队列，
+                 *    答案是不会的，因为当一个新的消费队列分配给消费者时，在添加其拉取任务之前必须先向Broker发送对该消息队列加锁请求，
+                 *     只有加锁成功后，才能添加拉取消息，否则等到下一次负载后，该消费队列被原先占有的解锁后，才能开始新的拉取任务。
+                 *     集群模式下，如果未锁定处理队列，则延迟该队列的消息消费。
                  */
                 if (MessageModel.BROADCASTING.equals(ConsumeMessageOrderlyService.this.defaultMQPushConsumerImpl.messageModel())
                     || (this.processQueue.isLocked() && !this.processQueue.isLockExpired())) {
@@ -598,7 +607,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                                     msgs,
                                     messageQueue);
                             }
-
+                            //消费耗时
                             long consumeRT = System.currentTimeMillis() - beginTimestamp;
                             if (null == status) {
                                 if (hasException) {
