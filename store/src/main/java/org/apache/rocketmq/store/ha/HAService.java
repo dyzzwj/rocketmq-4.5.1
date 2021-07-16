@@ -171,8 +171,11 @@ public class HAService {
      * master节点接受slave节点连接
      */
     class AcceptSocketService extends ServiceThread {
+        //Broker服务监听套接字(本地IP+端口号)
         private final SocketAddress socketAddressListen;
+        //服务端Socket通道，基于NIO
         private ServerSocketChannel serverSocketChannel;
+        //事件选择器，基于NIO。
         private Selector selector;
 
         public AcceptSocketService(final int port) {
@@ -185,11 +188,16 @@ public class HAService {
          * @throws Exception If fails.
          */
         public void beginAccept() throws Exception {
+            //打开通道
             this.serverSocketChannel = ServerSocketChannel.open();
+
             this.selector = RemotingUtil.openSelector();
             this.serverSocketChannel.socket().setReuseAddress(true);
+            //绑定地址
             this.serverSocketChannel.socket().bind(this.socketAddressListen);
+            //设置为非阻塞
             this.serverSocketChannel.configureBlocking(false);
+            //注册接受连接事件
             this.serverSocketChannel.register(this.selector, SelectionKey.OP_ACCEPT);
         }
 
@@ -218,12 +226,15 @@ public class HAService {
 
             while (!this.isStopped()) {
                 try {
+                    //选择就绪事件 最多等待1s
                     this.selector.select(1000);
                     Set<SelectionKey> selected = this.selector.selectedKeys();
 
                     if (selected != null) {
+                        //遍历就绪事件
                         for (SelectionKey k : selected) {
                             if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
+                                //接受连接
                                 SocketChannel sc = ((ServerSocketChannel) k.channel()).accept();
 
                                 if (sc != null) {
@@ -271,6 +282,9 @@ public class HAService {
 
     /**
      * GroupTransferService Service
+     *
+     *   同步主从
+     *
      */
     class GroupTransferService extends ServiceThread {
 
@@ -307,7 +321,9 @@ public class HAService {
                          * 重试 5次，每次条件不符合都等待Slave上传同步结果
                          */
                         for (int i = 0; !transferOK && i < 5; i++) {
+                            //等待
                             this.notifyTransferObject.waitForRunning(1000);
+                            //判断同步到的offset跟req的offset
                             transferOK = HAService.this.push2SlaveMaxOffset.get() >= req.getNextOffset();
                         }
 
@@ -328,7 +344,12 @@ public class HAService {
 
             while (!this.isStopped()) {
                 try {
+                    /**
+                     * 等待
+                     * GroupTransferService.putRequest会唤醒
+                     */
                     this.waitForRunning(10);
+                    //
                     this.doWaitTransfer();
                 } catch (Exception e) {
                     log.warn(this.getServiceName() + " service has exception. ", e);
@@ -354,27 +375,30 @@ public class HAService {
      * slave对master节点连接、读写数据 线程对象
      */
     class HAClient extends ServiceThread {
+        //socket读缓冲区最大大小
         private static final int READ_MAX_BUFFER_SIZE = 1024 * 1024 * 4;
         /**
-         * 主节点 ip:port
+         * master地址 ip:port
          */
         private final AtomicReference<String> masterAddress = new AtomicReference<>();
         /**
-         *  向Master汇报Slave最大Offset
+         *  向Master汇报Slave最大Offset  Slave向Master发起主从同步的拉取偏移量，固定8个字节
          */
         private final ByteBuffer reportOffset = ByteBuffer.allocate(8);
         private SocketChannel socketChannel;
         private Selector selector;
+        //上一次写入时间戳
         private long lastWriteTimestamp = System.currentTimeMillis();
 
         /**
-         * // Slave向Master汇报Offset，汇报到哪里
+         * // Slave向Master汇报Offset，反馈Slave当前的复制进度，当前slave commitlog文件最大偏移量
          */
         private long currentReportedOffset = 0;
-        // 粘包拆包使用的
+        // 粘包拆包使用的 本次已处理读缓存区的指针
         private int dispatchPostion = 0;
         // 从Master接收数据Buffer
         private ByteBuffer byteBufferRead = ByteBuffer.allocate(READ_MAX_BUFFER_SIZE);
+        //读缓存区备份，与BufferRead进行交换
         private ByteBuffer byteBufferBackup = ByteBuffer.allocate(READ_MAX_BUFFER_SIZE);
 
         public HAClient() throws IOException {
@@ -443,6 +467,12 @@ public class HAService {
 
         private boolean processReadEvent() {
             int readSizeZeroTimes = 0;
+
+            /**
+             * 如果读取到的字节数大于0，重置读取到0字节的次数，并更新最后一次写入时间戳（lastWriteTimestamp），然后调用dispatchReadRequest()转发该请求，处理消息的解析、入库。
+             * 如果连续3次从网络通道读取到0个字节，则结束本次读，返回true。
+             * 如果读取到的字节数小于0或发生IO异常，则返回false。
+             */
             while (this.byteBufferRead.hasRemaining()) {
                 try {
                     int readSize = this.socketChannel.read(this.byteBufferRead);
@@ -484,13 +514,21 @@ public class HAService {
          * @return 是否异常
          */
         private boolean dispatchReadRequest() {
+
+            //头部长度 大小为12个字节，包括消息的物理偏移量与消息的长度，长度字节必须首先探测，
+            // 否则无法判断byteBufferRead缓存区中是否包含一条完整的消息。
             final int msgHeaderSize = 8 + 4; // phyoffset + size
+            //readSocketPos：记录当前byteBufferRead的当前指针。
             int readSocketPos = this.byteBufferRead.position();
 
             while (true) {
                 int diff = this.byteBufferRead.position() - this.dispatchPostion;
                 //读取到请求
                 if (diff >= msgHeaderSize) {
+                    /**
+                     * 先探测byteBufferRead缓冲区中是否包含一条消息的头部，如果包含头部，则读取物理偏移量与消息长度，
+                     * 然后再探测是否包含一条完整的消息，如果不包含，则需要将byteBufferRead中的数据备份，以便更多数据到达再处理。
+                     */
                     // 读取masterPhyOffset、bodySize。使用dispatchPostion的原因是：处理数据“粘包”导致数据读取不完整。
                     long masterPhyOffset = this.byteBufferRead.getLong(this.dispatchPostion);
                     int bodySize = this.byteBufferRead.getInt(this.dispatchPostion + 8);
@@ -505,15 +543,26 @@ public class HAService {
                             return false;
                         }
                     }
-                    //粘包和拆包的处理
-                    // 如果diff 小于MSG_HEADER_SIZE + bodySize的值，那么代表发生拆包，等待下一次读取数据
+
+                    /**
+                     * 如果byteBufferRead中包含一则消息头部，则读取物理偏移量与消息的长度，然后获取Slave当前消息文件的最大物理偏移量，
+                     * 如果slave的最大物理偏移量与master给的偏移量不相等，则返回false，
+                     * 从后面的处理逻辑来看，返回false,将会关闭与master的连接，在Slave本次周期内将不会再参与主从同步了
+                     *  粘包和拆包的处理 如果diff 小于MSG_HEADER_SIZE + bodySize的值，那么代表发生拆包，等待下一次读取数据
+                     */
                     if (diff >= (msgHeaderSize + bodySize)) {
                         byte[] bodyData = new byte[bodySize];
                         this.byteBufferRead.position(this.dispatchPostion + msgHeaderSize);
                         this.byteBufferRead.get(bodyData);
 
                         /**
-                         * 将master返回的数据写入到commitLog
+                         * dispatchPosition：表示byteBufferRead中已转发的指针。设置byteBufferRead的position指针为dispatchPosition+msgHeaderSize,
+                         * 然后读取bodySize个字节内容到byte[]字节数组中，并调用DefaultMessageStore#appendToCommitLog方法将消息内容追加到消息内存映射文件中，
+                         * 然后唤醒ReputMessageService实时将消息转发给消息消费队列与索引文件，更新dispatchPosition，并向服务端及时反馈当前已存储进度。
+                         * 将所读消息存入内存映射文件后重新向服务端发送slave最新的偏移量。
+                         */
+                        /**
+                         * 将master返回的数据写入到commitLog并唤醒重做日志线程
                          */
                         HAService.this.defaultMessageStore.appendToCommitLog(masterPhyOffset, bodyData);
                         //设置处理到的位置
@@ -530,6 +579,11 @@ public class HAService {
 
                 //空间写满 重新分配空间
                 if (!this.byteBufferRead.hasRemaining()) {
+                    /**
+                     * 如果byteBufferRead中未包含一条完整的消息的处理逻辑，具体看一下reallocateByteBuffer的实现。
+                     *
+                     * 其核心思想是将readByteBuffer中剩余的有效数据先复制到readByteBufferBak,然后交换readByteBuffer与readByteBufferBak。
+                     */
                     this.reallocateByteBuffer();
                 }
 
@@ -556,6 +610,13 @@ public class HAService {
             return result;
         }
 
+
+        /**
+         * 在Broker启动时，如果其角色为SLAVE时，将读取Broker配置文件中的haMasterAddress属性更新HAClient的masterAddrees,
+         * 如果角色为SLAVE但haMasterAddress为空，启动不会报错，但不会执行主从复制，该方法最终返回是否成功连接上Master。
+         * @return
+         * @throws ClosedChannelException
+         */
         private boolean connectMaster() throws ClosedChannelException {
             if (null == socketChannel) {
                 /**
@@ -621,6 +682,7 @@ public class HAService {
                         //若满足上报间隔   默认5s
                         if (this.isTimeToReportOffset()) {
                             /**
+                             * 如果需要向Master反馈当前拉取偏移量，则向Master发送一个8字节的请求，请求包中包含的数据为当前Broker消息文件的最大偏移量。
                              *  上报给master当前slave的本地的commitLog已经同步的物理位置
                              */
                             boolean result = this.reportSlaveMaxOffset(this.currentReportedOffset);

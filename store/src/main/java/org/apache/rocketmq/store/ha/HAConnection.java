@@ -30,13 +30,24 @@ import org.apache.rocketmq.store.SelectMappedBufferResult;
 
 public class HAConnection {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+    //HAService对象
     private final HAService haService;
+    //网络socket通道。
     private final SocketChannel socketChannel;
+    //客户端连接地址
     private final String clientAddr;
+    //master向slave写数据的服务类
     private WriteSocketService writeSocketService;
+    //master从slave读数据的服务类
     private ReadSocketService readSocketService;
 
+    /**
+     * slave请求拉取数据的偏移量
+     */
     private volatile long slaveRequestOffset = -1;
+    /**
+     * slave反馈已拉取完成的数据偏移量
+     */
     private volatile long slaveAckOffset = -1;
 
     public HAConnection(final HAService haService, final SocketChannel socketChannel) throws IOException {
@@ -99,6 +110,9 @@ public class HAConnection {
             this.setDaemon(true);
         }
 
+        /**
+         * Master收到从服务器的拉取请求 拉取请求是slave下一次待拉取的消息偏移量，也可以认为是Slave的拉取偏移量确认信息
+         */
         @Override
         public void run() {
             HAConnection.log.info(this.getServiceName() + " service started");
