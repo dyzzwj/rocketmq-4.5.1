@@ -43,8 +43,14 @@ import org.apache.rocketmq.store.DefaultMessageStore;
 public class HAService {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    /**
+     * master维护的连接数
+     */
     private final AtomicInteger connectionCount = new AtomicInteger(0);
 
+    /**
+     * master维护的连接信息
+     */
     private final List<HAConnection> connectionList = new LinkedList<>();
 
     /**
@@ -52,11 +58,14 @@ public class HAService {
      */
     private final AcceptSocketService acceptSocketService;
 
+    //Broker存储实现。
     private final DefaultMessageStore defaultMessageStore;
-
+    //同步等待实现
     private final WaitNotifyObject waitNotifyObject = new WaitNotifyObject();
+    //该Master所有Slave中同步最大的偏移量
     private final AtomicLong push2SlaveMaxOffset = new AtomicLong(0);
 
+    //判断主从同步复制是否完成
     private final GroupTransferService groupTransferService;
 
     /**

@@ -86,7 +86,9 @@ public class PullMessageProcessor implements NettyRequestProcessor {
         return false;
     }
 
-    private RemotingCommand processRequest(final Channel channel, RemotingCommand request, boolean brokerAllowSuspend)
+    private RemotingCommand processRequest(final Channel channel, RemotingCommand request,
+                                           boolean brokerAllowSuspend//是否允许在未找到消息时暂时挂起线程
+                                            )
         throws RemotingCommandException {
         RemotingCommand response = RemotingCommand.createResponseCommand(PullMessageResponseHeader.class);
         //构建返回给consumer端的response
@@ -466,6 +468,7 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                         //计算本次拉取请求的最多挂起时间戳 到了该时间戳 就算没有新的message 也需要唤醒挂起请求
                         long pollingTimeMills = suspendTimeoutMillisLong;
                         if (!this.brokerController.getBrokerConfig().isLongPollingEnable()) {
+                            //如果不支持长轮询，则忽略 brokerSuspendMaxTimeMillis 属性，使用 shortPollingTimeMills
                             pollingTimeMills = this.brokerController.getBrokerConfig().getShortPollingTimeMills();
                         }
 
@@ -478,6 +481,9 @@ public class PullMessageProcessor implements NettyRequestProcessor {
                          * 添加到 拉取消息请求挂起维护线程服务 队列
                          */
                         this.brokerController.getPullRequestHoldService().suspendPullRequest(topic, queueId, pullRequest);
+                        /**
+                         * 设置response=null，则此时此次调用不会向客户端输出任何字节，客户端网络请求客户端的读事件不会触发，不会触发对响应结果的处理，处于等待状态。
+                         */
                         response = null;
                         break;
                     }
