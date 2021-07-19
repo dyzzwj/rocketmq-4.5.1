@@ -127,8 +127,11 @@ public class HAService {
     // }
 
     public void start() throws Exception {
+        //开启master监听
         this.acceptSocketService.beginAccept();
+        //启动线程
         this.acceptSocketService.start();
+        //
         this.groupTransferService.start();
         this.haClient.start();
     }
@@ -255,7 +258,7 @@ public class HAService {
                                         HAConnection conn = new HAConnection(HAService.this, sc);
                                         /**
                                          *  readSocketService：处理Slave上传的进度及其他相关操作
-                                         *  writeSocketService：
+                                         *  writeSocketService：将消息内容传输给slave
                                          */
                                         conn.start();
                                         //将连接保存到connectionList中
@@ -320,6 +323,11 @@ public class HAService {
             this.requestsRead = tmp;
         }
 
+        /**
+         * 判断主从同步是否完成的依据是：所有Slave中已成功复制的最大偏移量是否大于等于消息生产者发送消息后消息服务端返回下一条消息的起始偏移量，
+         * 如果是则表示主从同步复制已经完成，唤醒消息发送线程，否则等待1s,再次判断，每一个任务在一批任务中循环判断5次。消息消费者返回有两种情况：
+         * 如果等待超过5s或 GroupTransferService通知主从复制完成则返回。可以通过syncFlushTimeout来设置等待时间。
+         */
         private void doWaitTransfer() {
             synchronized (this.requestsRead) {
                 if (!this.requestsRead.isEmpty()) {
