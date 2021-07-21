@@ -122,9 +122,16 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
     public void check(long transactionTimeout, int transactionCheckMax,
         AbstractTransactionalMessageCheckListener listener) {
         try {
-            //Topic从RMQ_SYS_TRANS_HALF_TOPIC变更为RMQ_SYS_TRANS_OP_HALF_TOPIC存储到日志文件，依靠文件删除机制删除。
+
+            /**
+             * RMQ_SYS_TRANS_HALF_TOPIC：prepare消息的主题，事务消息首先先进入到该主题。
+             * RMQ_SYS_TRANS_OP_HALF_TOPIC：commit或rollback消息的主题，当消息服务器收到事务消息的提交或回滚请求后，
+             * 会将消息存储在该主题下。 EndTransactionProcessor
+             */
+            //当消息服务器收到事务消息的提交或回滚请求后 该条消息对应的topic从RMQ_SYS_TRANS_HALF_TOPIC变更为RMQ_SYS_TRANS_OP_HALF_TOPIC存储到日志文件，依靠文件删除机制删除。
             //半消息存储topic
             String topic = MixAll.RMQ_SYS_TRANS_HALF_TOPIC;
+            //获取该主题下所有的messagequeue
             Set<MessageQueue> msgQueues = transactionalMessageBridge.fetchMessageQueues(topic);
             if (msgQueues == null || msgQueues.size() == 0) {
                 log.warn("The queue of topic is empty :" + topic);
@@ -133,11 +140,11 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
             log.debug("Check topic={}, queues={}", topic, msgQueues);
             for (MessageQueue messageQueue : msgQueues) {
                 long startTime = System.currentTimeMillis();
-                //获取对应的RMQ_SYS_TRANS_OP_HALF_TOPIC中的队列
+                //获取对应的操作队列  RMQ_SYS_TRANS_OP_HALF_TOPIC中的队列
                 MessageQueue opQueue = getOpQueue(messageQueue);
-                //半消息消费队列中偏移量
+                //半消息消费队列中消费进度 偏移量
                 long halfOffset = transactionalMessageBridge.fetchConsumeOffset(messageQueue);
-                //OP已删除消费队列中的偏移量
+                //OP消费队列中的消费进度 偏移量
                 long opOffset = transactionalMessageBridge.fetchConsumeOffset(opQueue);
                 log.info("Before check, the queue={} msgOffset={} opOffset={}", messageQueue, halfOffset, opOffset);
                 if (halfOffset < 0 || opOffset < 0) {
@@ -148,6 +155,8 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
 
                 List<Long> doneOpOffset = new ArrayList<>();
                 HashMap<Long, Long> removeMap = new HashMap<>();
+
+                //调用fillOpRemoveMap主题填充removeMap、doneOpOffset数据结构，这里主要的目的是避免重复调用事务回查接口
                 PullResult pullResult = fillOpRemoveMap(removeMap, opQueue, opOffset, halfOffset, doneOpOffset);
                 if (null == pullResult) {
                     log.error("The queue={} check msgOffset={} with opOffset={} failed, pullResult is null",
@@ -155,10 +164,18 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
                     continue;
                 }
                 // single thread
+
+                //获取空消息的次数
                 int getMessageNullCount = 1;
+                //当前处理RMQ_SYS_TRANS_HALF_TOPIC#queueId的最新进度。
                 long newOffset = halfOffset;
+                //当前处理消息的队列偏移量，其主题依然为RMQ_SYS_TRANS_HALF_TOPIC。
                 long i = halfOffset;
                 while (true) {
+                    /**
+                     * 一个任务处理，可以限制每次最多处理的时间，RocketMQ为待检测主题RMQ_SYS_TRANS_HALF_TOPIC的每个队列，
+                     * 做事务状态回查，一次最多不超过60S，目前该值不可配置。
+                     */
                     if (System.currentTimeMillis() - startTime > MAX_PROCESS_TIME_LIMIT) {
                         log.info("Queue={} process time reach max={}", messageQueue, MAX_PROCESS_TIME_LIMIT);
                         break;
@@ -287,6 +304,11 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
      */
     private PullResult fillOpRemoveMap(HashMap<Long, Long> removeMap,
         MessageQueue opQueue, long pullOffsetOfOp, long miniOffset, List<Long> doneOpOffset) {
+        /**
+         *  miniOffset:半消息消费队列中消费进度 偏移量
+         *  pullOffsetOfOp:OP消费队列中的消费进度 偏移量
+         */
+        //commit或rollback消息的主题，当消息服务器收到事务消息的提交或回滚请求后，会将消息存储在该主题下。 EndTransactionProcessor
         PullResult pullResult = pullOpMsg(opQueue, pullOffsetOfOp, 32);
         if (null == pullResult) {
             return null;
@@ -308,15 +330,21 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
             return pullResult;
         }
         for (MessageExt opMessageExt : opMsg) {
+            /**
+             *  存储消息的时候设置的
+             * commit或rollback消息的body为prepared消息的queueoffset
+             */
             Long queueOffset = getLong(new String(opMessageExt.getBody(), TransactionalMessageUtil.charset));
             log.info("Topic: {} tags: {}, OpOffset: {}, HalfOffset: {}", opMessageExt.getTopic(),
                 opMessageExt.getTags(), opMessageExt.getQueueOffset(), queueOffset);
+            //commit或rollback消息的主题
             if (TransactionalMessageUtil.REMOVETAG.equals(opMessageExt.getTags())) {
                 //已经处理过的消息即commit和rollback
+                //miniOffset:半消息消费队列中消费进度 偏移量
                 if (queueOffset < miniOffset) {
                     doneOpOffset.add(opMessageExt.getQueueOffset());
                 } else {
-                    //已经处理删除过了，但半消息还没更新
+                    //已经处理过了，但半消息还没更新
                     removeMap.put(queueOffset, opMessageExt.getQueueOffset());
                 }
             } else {
@@ -479,6 +507,9 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
 
     @Override
     public boolean deletePrepareMessage(MessageExt msgExt) {
+        /**
+         * msgExt:prepare消息
+         */
         if (this.transactionalMessageBridge.putOpMessage(msgExt, TransactionalMessageUtil.REMOVETAG)) {
             log.info("Transaction op message write successfully. messageId={}, queueId={} msgExt:{}", msgExt.getMsgId(), msgExt.getQueueId(), msgExt);
             return true;

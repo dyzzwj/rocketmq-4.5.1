@@ -403,7 +403,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         PutMessageResult putMessageResult = null;
         Map<String, String> oriProps = MessageDecoder.string2messageProperties(requestHeader.getProperties());
         String traFlag = oriProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
-        //判断是否是事务消息
+        /**
+         * 判断是否是事务消息
+         */
         if (traFlag != null && Boolean.parseBoolean(traFlag)) {
             //可以通过配置是否接受事务消息存储
             if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {
@@ -419,7 +421,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
              */
             putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
         } else {
-            //存储消息
+            /**
+             * 非实物普通消息存储
+             */
             //AbstractPluginMessageStore.putMessage
             putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
         }

@@ -50,7 +50,7 @@ public class SubscriptionGroupConfig {
     private long brokerId = MixAll.MASTER_ID;
 
     /**
-     * 当消费者消费较慢时 从哪台broker消费消息
+     * 当消费者消费较慢时 从哪台broker消费消息 默认为1
      */
     private long whichBrokerWhenConsumeSlowly = 1;
 
