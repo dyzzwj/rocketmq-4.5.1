@@ -827,6 +827,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 requestHeader.setReconsumeTimes(0);
                 requestHeader.setUnitMode(this.isUnitMode());
                 requestHeader.setBatch(msg instanceof MessageBatch);
+                //是否是重试消息
                 if (requestHeader.getTopic().startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
                     String reconsumeTimes = MessageAccessor.getReconsumeTime(msg);
                     if (reconsumeTimes != null) {
@@ -1260,7 +1261,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         SendResult sendResult = null;
         //发送 【Half消息】
         MessageAccessor.putProperty(msg, MessageConst.PROPERTY_TRANSACTION_PREPARED, "true");
-        //生产者组 用于回查本地事务时，从生产者组中选择随机选择一个生产者即可
+        //消息所属生产者组 用于回查本地事务时
         MessageAccessor.putProperty(msg, MessageConst.PROPERTY_PRODUCER_GROUP, this.defaultMQProducer.getProducerGroup());
         try {
             //发送消息
@@ -1274,7 +1275,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         //处理发送【Half消息】结果
         switch (sendResult.getSendStatus()) {
             case SEND_OK: {
-                //发送【Half】消息成功 执行本地事务逻辑
+                /**
+                 * 发送【Half】消息成功 执行本地事务逻辑TransactionListener#executeLocalTransaction
+                 * 如果【Half】发送失败，则不会调用TransactionListener#executeLocalTransaction
+                 */
                 try {
 
                     if (sendResult.getTransactionId() != null) {//事务编号。目前开源版本暂时没用到，猜想ONS在使用

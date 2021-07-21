@@ -214,16 +214,22 @@ public class TransactionalMessageBridge {
             MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), MessageSysFlag.TRANSACTION_NOT_TYPE));
         //主题变更 RMQ_SYS_TRANS_HALF_TOPIC
         msgInner.setTopic(TransactionalMessageUtil.buildHalfTopic());
-        //消息队列变更为0
+        //消息队列id变更为0
         msgInner.setQueueId(0);
         msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
         return msgInner;
     }
 
     public boolean putOpMessage(MessageExt messageExt, String opType) {
+        /**
+         * msgExt:prepare消息
+         */
         MessageQueue messageQueue = new MessageQueue(messageExt.getTopic(),
             this.brokerController.getBrokerConfig().getBrokerName(), messageExt.getQueueId());
         if (TransactionalMessageUtil.REMOVETAG.equals(opType)) {
+            /**
+             * 添加tags，设置commit或rollback消息的body  在事务消息回查service会用到
+             */
             return addRemoveTagInTransactionOp(messageExt, messageQueue);
         }
         return true;
@@ -318,6 +324,9 @@ public class TransactionalMessageBridge {
     private boolean addRemoveTagInTransactionOp(MessageExt messageExt, MessageQueue messageQueue) {
         //主题变更为RMQ_SYS_TRANS_OP_HALF_TOPIC
         Message message = new Message(TransactionalMessageUtil.buildOpTopic(), TransactionalMessageUtil.REMOVETAG,
+                /**
+                 * commit或rollback消息的body为prepared消息的queueoffset TransactionalMessageServiceImpl#fillOpRemoveMap()会用到
+                 */
             String.valueOf(messageExt.getQueueOffset()).getBytes(TransactionalMessageUtil.charset));
         writeOp(message, messageQueue);
         return true;

@@ -172,7 +172,7 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
-                    //删除消息
+                    //删除消息 删除prepare消息 是将消息存储于RMQ_SYS_TRANS_OP_HALF_TOPIC中(实际上没有删 只不过存储在一个特殊的topic中)
                     this.brokerController.getTransactionalMessageService().deletePrepareMessage(result.getPrepareMessage());
                 }
                 return res;

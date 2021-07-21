@@ -92,7 +92,7 @@ public class PullAPIWrapper {
         PullResultExt pullResultExt = (PullResultExt) pullResult;
 
         /**
-         * 更新消息队列拉取消息Broker编号的映射
+         * 更新消息队列拉取消息Broker编号的映射 根据主服务器的建议拉取brokerId来更新pullFromWhichNodeTable
          */
         this.updatePullFromWhichNode(mq, pullResultExt.getSuggestWhichBrokerId());
         //解析消息 并根据订阅信息tag code匹配合适消息
