@@ -696,7 +696,7 @@ public class HAService {
                     //有没有连接到master  会更新currentReportedOffset
                     if (this.connectMaster()) {
 
-                        //若满足上报间隔   默认5s
+                        //若满足上报间隔  默认5s 判断是否需要向Master汇报已拉取消息偏移量。其依据为每次拉取间隔必须大于haSendHeartbeatInterval，默认5s
                         if (this.isTimeToReportOffset()) {
                             /**
                              * 如果需要向Master反馈当前拉取偏移量，则向Master发送一个8字节的请求，请求包中包含的数据为当前Broker消息文件的最大偏移量。

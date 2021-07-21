@@ -28,6 +28,11 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.apache.rocketmq.store.SelectMappedBufferResult;
 
+/**
+ *  一个slave对应一个HAConnection
+ *  在Master端会在一个固定端口监听客户端的连接，当收到客户端的连接请求后，会接收连接并构建SocketChannel，
+ *  然后将该SocketChannel封装成一个HAConnection连接实例，其职责是处理Master与Slave的读写相关的操作
+ */
 public class HAConnection {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     //关联的AService实现类。
@@ -96,11 +101,16 @@ public class HAConnection {
     }
 
     class ReadSocketService extends ServiceThread {
+        //网络读缓存区大小，默认1M
         private static final int READ_MAX_BUFFER_SIZE = 1024 * 1024;
+        //NIO网络事件选择器
         private final Selector selector;
+        //网络通道，用于读写的socket通道
         private final SocketChannel socketChannel;
+        //网络读写缓存区，默认为1M
         private final ByteBuffer byteBufferRead = ByteBuffer.allocate(READ_MAX_BUFFER_SIZE);
         private int processPostion = 0;
+        //上次读取数据的时间戳
         private volatile long lastReadTimestamp = System.currentTimeMillis();
 
         public ReadSocketService(final SocketChannel socketChannel) throws IOException {
@@ -175,14 +185,27 @@ public class HAConnection {
             int readSizeZeroTimes = 0;
 
             //清空byteBufferRead
+            /**
+             * 如果byteBufferRead没有剩余空间，说明该positionlimitcapacity，调用byteBufferRead.flip()方法，
+             * 其实这里调用clear()方法会更加容易理解，并设置processPostion为0，processPostion为byteBufferRead当前已处理数据的指针。
+             */
             if (!this.byteBufferRead.hasRemaining()) {
                 this.byteBufferRead.flip();
                 this.processPostion = 0;
             }
 
+            /**
+             * NIO网络读的常规方法，由于NIO是非阻塞的，一次网络读写的字节大小不确定，一般都会尝试多次读取。
+             */
             while (this.byteBufferRead.hasRemaining()) {
                 try {
                     int readSize = this.socketChannel.read(this.byteBufferRead);
+
+                    /**
+                     * 如果读取的字节大于0并且本次读取到的内容大于等于8，表明收到从服务器一条拉取消息请求。
+                     * 读取从服务器已拉取偏移量，因为有新的从服务器反馈拉取进度，需要通知某些生产者以便返回，
+                     * 因为如果消息发送使用同步方式，需要等待将消息复制到从服务器，然后才返回，故这里需要唤醒相关线程去判断自己关注的消息是否已经传输完成。
+                     */
                     if (readSize > 0) {
                         readSizeZeroTimes = 0;
                         //设置最后读取时间
@@ -207,6 +230,9 @@ public class HAConnection {
                             HAConnection.this.haService.notifyTransferSome(HAConnection.this.slaveAckOffset);
                         }
                     } else if (readSize == 0) {
+                        /**
+                         * 如果读取到的字节数等于0，则重复三次，否则结束本次读请求处理；如果读取到的字节数小于0，表示连接被断开，返回false，后续会断开该连接。
+                         */
                         if (++readSizeZeroTimes >= 3) {
                             break;
                         }
