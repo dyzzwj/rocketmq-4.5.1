@@ -322,6 +322,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
             @Override
             public void run() {
+                //获取消息发送者的TransactionListener
                 TransactionCheckListener transactionCheckListener = DefaultMQProducerImpl.this.checkListener();
                 TransactionListener transactionListener = getCheckListener();
                 if (transactionCheckListener != null || transactionListener != null) {
@@ -331,6 +332,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         if (transactionCheckListener != null) {
                             localTransactionState = transactionCheckListener.checkLocalTransactionState(message);
                         } else if (transactionListener != null) {
+                            /**
+                             * 执行TransactionListener#checkLocalTransaction，检测本地事务状态，也就是应用程序需要实现TransactionListener#checkLocalTransaction，
+                             * 告知RocketMQ该事务的事务状态，然后返回COMMIT_MESSAGE、ROLLBACK_MESSAGE、UNKNOW中的一个，然后向Broker发送END_TRANSACTION命令即可，
+                             */
                             log.debug("Used new check API in transaction message");
                             localTransactionState = transactionListener.checkLocalTransaction(message);
                         } else {
@@ -341,6 +346,9 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         exception = e;
                     }
 
+                    /**
+                     * 处理事务状态
+                     */
                     this.processTransactionState(
                         localTransactionState,
                         group,
@@ -388,6 +396,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 }
 
                 try {
+                    //发送END_TRANSACTION到Broker
                     DefaultMQProducerImpl.this.mQClientFactory.getMQClientAPIImpl().endTransactionOneway(brokerAddr, thisHeader, remark,
                         3000);
                 } catch (Exception e) {

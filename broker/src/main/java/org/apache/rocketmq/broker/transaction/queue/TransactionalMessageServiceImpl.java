@@ -142,7 +142,7 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
             //当消息服务器收到事务消息的提交或回滚请求后 该条消息对应的topic从RMQ_SYS_TRANS_HALF_TOPIC变更为RMQ_SYS_TRANS_OP_HALF_TOPIC存储到日志文件，依靠文件删除机制删除。
             //半消息存储topic
             String topic = MixAll.RMQ_SYS_TRANS_HALF_TOPIC;
-            //获取该主题下所有的messagequeue
+            //获取半消息存储topic下所有的messagequeue
             Set<MessageQueue> msgQueues = transactionalMessageBridge.fetchMessageQueues(topic);
             if (msgQueues == null || msgQueues.size() == 0) {
                 log.warn("The queue of topic is empty :" + topic);
@@ -384,7 +384,7 @@ public class TransactionalMessageServiceImpl implements TransactionalMessageServ
                 //miniOffset:半消息消费队列中消费进度 偏移量
                 //比较 半消息消费队列中的最大偏移量miniOffset 与 删除消费队列的消息偏移量queueOffset；
                 if (queueOffset < miniOffset) {
-                    //表示当前commit或rollbak的prepare消息已经被出路了
+                    //表示当前commit或rollbak的prepare消息已经被处理了
                     doneOpOffset.add(opMessageExt.getQueueOffset());
                 } else {
                     //已经处理过了即已经commit或rollback了，但半消息还没更新

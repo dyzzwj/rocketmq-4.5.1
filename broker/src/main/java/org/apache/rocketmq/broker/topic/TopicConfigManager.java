@@ -72,17 +72,24 @@ public class TopicConfigManager extends ConfigManager {
             this.topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
         }
         {
+
+            /**
+             * 如果开启了允许自动创建主题
+             */
             // MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC
             if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
                 String topic = MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC;
                 TopicConfig topicConfig = new TopicConfig(topic);
                 this.systemTopicList.add(topic);
+                //默认为8
                 topicConfig.setReadQueueNums(this.brokerController.getBrokerConfig()
                     .getDefaultTopicQueueNums());
+                //默认为8
                 topicConfig.setWriteQueueNums(this.brokerController.getBrokerConfig()
                     .getDefaultTopicQueueNums());
                 int perm = PermName.PERM_INHERIT | PermName.PERM_READ | PermName.PERM_WRITE;
                 topicConfig.setPerm(perm);
+
                 this.topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
             }
         }
