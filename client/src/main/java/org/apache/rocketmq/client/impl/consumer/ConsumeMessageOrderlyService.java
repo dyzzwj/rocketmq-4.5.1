@@ -483,7 +483,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
             final Object objLock = messageQueueLock.fetchLockObject(this.messageQueue);
 
             /**
-             *     加Consumer消息队列锁 （消费者是多线程的）
+             *     加Consumer消息处理队列消费锁 （消费者是多线程的）
              *     当前消费者组的其他消费者获取不到当前messagequeue的分布式锁了
              *     但消费者是多线程的 所以一个消费者内部的多线程消费消息时要加锁
              *     意味着一个消费者内消费线程池中的线程并发度是消息消费队列级别，同一个消费队列在同一时刻只会被一个线程消费，其他线程排队消费
