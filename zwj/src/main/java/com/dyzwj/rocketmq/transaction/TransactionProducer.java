@@ -32,5 +32,6 @@ public class TransactionProducer {
                 return null;
             }
         });
+        producer.sendMessageInTransaction(null,null);
     }
 }
