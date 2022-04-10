@@ -22,6 +22,10 @@ import org.apache.rocketmq.client.producer.MessageQueueSelector;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 
+/**
+ * 随机分配策略 使用了简单的随机数选择算法
+ *
+ */
 public class SelectMessageQueueByRandom implements MessageQueueSelector {
     private Random random = new Random(System.currentTimeMillis());
 

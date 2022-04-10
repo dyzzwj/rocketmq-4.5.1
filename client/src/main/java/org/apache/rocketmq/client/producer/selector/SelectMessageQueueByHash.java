@@ -21,6 +21,11 @@ import org.apache.rocketmq.client.producer.MessageQueueSelector;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
 
+
+/**
+ * 基于Hash分配策略
+ * 根据附加参数的Hash值，按照消息队列列表的大小取余数，得到消息队列的index
+ */
 public class SelectMessageQueueByHash implements MessageQueueSelector {
 
     @Override

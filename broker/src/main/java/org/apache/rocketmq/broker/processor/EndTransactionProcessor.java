@@ -129,27 +129,45 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
 
 
         OperationResult result = new OperationResult();
+        /**
+         * 其核心实现就是根据commitlogOffset找到消息，如果是提交动作，就恢复原消息的主题与队列，再次存入commitlog文件进而转到消息消费队列，
+         * 供消费者消费，然后将原预处理消息存入一个新的主题RMQ_SYS_TRANS_OP_HALF_TOPIC，代表该消息已被处理；回滚消息与提交事务消息不同的是，
+         * 提交事务消息会将消息恢复原主题与队列，再次存储在commitlog文件中。
+         */
         if (MessageSysFlag.TRANSACTION_COMMIT_TYPE == requestHeader.getCommitOrRollback()) {
             /**
              *  提交 commit
              */
 
-            //查询PREPARE消息
+            //根据commitLogOffset查询PREPARE消息
             //org.apache.rocketmq.broker.transaction.queue.TransactionalMessageServiceImpl.commitMessage
             result = this.brokerController.getTransactionalMessageService().commitMessage(requestHeader);
-            if (result.getResponseCode() == ResponseCode.SUCCESS) {
+            if (result.getResponseCode() == ResponseCode.SUCCESS) { //如果成功查找到消息，则继续处理，否则返回给客户端，消息未找到错误信息
+                /**
+                 * 验证消息的必要字段
+                 *      验证消息的生产组与请求信息中的生产者组是否一致。
+                 *      验证消息的队列偏移量（queueOffset）与请求信息中的偏移量是否一致。
+                 *      验证消息的commitLogOffset与请求信息中的CommitLogOffset是否一致。
+                 */
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
                     /***
-                     * 半消息还原
+                     * 半消息还原 恢复事务消息的真实的主题、队列，并设置事务ID
                      */
                     MessageExtBrokerInner msgInner = endMessageTransaction(result.getPrepareMessage());
+                    /**
+                     * 设置消息的相关属性，这一步应该直接在endMessageTransaction中实现就好，统一恢复原消息的数量，特别关注的是取消了事务相关的系统标记。
+                     */
                     msgInner.setSysFlag(MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), requestHeader.getCommitOrRollback()));
                     msgInner.setQueueOffset(requestHeader.getTranStateTableOffset());
                     msgInner.setPreparedTransactionOffset(requestHeader.getCommitLogOffset());
                     msgInner.setStoreTimestamp(result.getPrepareMessage().getStoreTimestamp());
 
-                    //新组装的消息存储
+                    /**
+                     * 新组装的消息存储
+                     * 其实现原理非常简单，调用MessageStore将消息存储在commitlog文件中，此时的消息，会被转发到原消息主题对应的消费队列，被消费者消费。
+                     */
+
                     RemotingCommand sendResult = sendFinalMessage(msgInner);
                     if (sendResult.getCode() == ResponseCode.SUCCESS) {
                         /**

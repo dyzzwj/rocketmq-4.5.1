@@ -59,12 +59,18 @@ public abstract class AbstractTransactionalMessageCheckListener {
         checkTransactionStateRequestHeader.setMsgId(msgExt.getUserProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX));
         checkTransactionStateRequestHeader.setTransactionId(checkTransactionStateRequestHeader.getMsgId());
         checkTransactionStateRequestHeader.setTranStateTableOffset(msgExt.getQueueOffset());
+        //恢复原主题
         msgExt.setTopic(msgExt.getUserProperty(MessageConst.PROPERTY_REAL_TOPIC));
+        //恢复原队列
         msgExt.setQueueId(Integer.parseInt(msgExt.getUserProperty(MessageConst.PROPERTY_REAL_QUEUE_ID)));
+
         msgExt.setStoreSize(0);
+        //获取生产者组名称
         String groupId = msgExt.getProperty(MessageConst.PROPERTY_PRODUCER_GROUP);
+        //根据生产者组获取任意一个生产者，通过与其连接发送事务回查消息，回查消息的请求者为【Broker服务器】，接收者为(client，具体为消息生产者)。
         Channel channel = brokerController.getProducerManager().getAvaliableChannel(groupId);
         if (channel != null) {
+            //回查消息
             brokerController.getBroker2Client().checkProducerTransactionState(groupId, channel, checkTransactionStateRequestHeader, msgExt);
         } else {
             LOGGER.warn("Check transaction failed, channel is null. groupId={}", groupId);
