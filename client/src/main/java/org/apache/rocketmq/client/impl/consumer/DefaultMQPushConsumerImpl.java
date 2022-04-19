@@ -692,6 +692,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
                 if (this.defaultMQPushConsumer.getOffsetStore() != null) {
                     this.offsetStore = this.defaultMQPushConsumer.getOffsetStore();
                 } else {
+                    /**
+                     *  消费offset管理
+                     *  广播模式 本地文件offset存储
+                     *  集群模式 远程brokeroffset存储
+                     */
                     switch (this.defaultMQPushConsumer.getMessageModel()) {
                         case BROADCASTING:
                             //广播 本地文件offset存储 既然每条消息要被每一个消费者消费，则消费进度可以与消费者保存在一起

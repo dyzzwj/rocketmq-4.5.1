@@ -354,12 +354,16 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
          */
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());
         /**
-         * 更新消费进度
+         * 更新消息消费offset
          * 广播模式 - 消费进度存储在本地
          * 集群模式 - 消费进度存储在broker
          */
         if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
             //更新消费进度
+            /**
+             *  广播模式 本地文件offset存储 LocalFileOffsetStore#updateOffset()
+             *  集群模式 远程brokeroffset存储  RemoteBrokerOffsetStore#updateOffset()
+             */
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), offset, true);
         }
     }
