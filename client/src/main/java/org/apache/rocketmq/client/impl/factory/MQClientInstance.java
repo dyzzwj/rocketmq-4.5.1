@@ -290,7 +290,7 @@ public class MQClientInstance {
                     /**
                      *
                      * PullMessageService 只为 PUSH 模式服务，ReblanceService进行路由重新分布时，
-                     * 如果是 RebalancePullImpl, 并不会产生PullRequest，从而唤醒PullMessageService、
+                     * 如果是 RebalancePullImpl(pull模式), 并不会产生PullRequest，从而唤醒PullMessageService、
                      * PullMessageService 被唤醒后，也是执行 DefaultMQPushConsumerImpl 的 pullMessage 方法。
                      * 启动拉取消息的任务 只有消费者会启动此任务 生产者不会启动
                      */

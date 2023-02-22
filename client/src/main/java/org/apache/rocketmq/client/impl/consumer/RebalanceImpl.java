@@ -410,6 +410,8 @@ public abstract class RebalanceImpl {
 
                     /**
                      * 比较新分配的MessageQueue和consumer当前的负载集合 看看是否有messagequeue的变化 并依据变化做出不同的处理
+                     *
+                     * PUSH：将PullRequest添加到pullRequestQueue
                      */
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, allocateResultSet, isOrder);
                     if (changed) {

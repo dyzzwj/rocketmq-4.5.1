@@ -208,12 +208,11 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         //如果超过最大重试次数，则topic修改成"%DLQ%" + 分组名，即加入 死信队列(Dead Letter Queue)
-        //如果消息的消费重试次数大于最大重新消费次数或则延迟级别小于0，修改消息的topic名称为%DLQ%，设置该主题的权限为只写，说明消息进入死信队列后将不再被消费
+        //如果消息的消费重试次数大于最大重新消费次数或延迟级别小于0，修改消息的topic名称为%DLQ%，设置该主题的权限为只写，说明消息进入死信队列后将不再被消费
         if (msgExt.getReconsumeTimes() >= maxReconsumeTimes
             || delayLevel < 0) {
             /**
              *  死信topic是基于消费者组的
-             *  消息重试的消息主题是基于消费组
              */
             newTopic = MixAll.getDLQTopic(requestHeader.getGroup());
             queueIdInt = Math.abs(this.random.nextInt() % 99999999) % DLQ_NUMS_PER_GROUP;
@@ -422,7 +421,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             putMessageResult = this.brokerController.getTransactionalMessageService().prepareMessage(msgInner);
         } else {
             /**
-             * 非实物普通消息存储
+             * 非事务普通消息存储
              */
             //AbstractPluginMessageStore.putMessage
             putMessageResult = this.brokerController.getMessageStore().putMessage(msgInner);
