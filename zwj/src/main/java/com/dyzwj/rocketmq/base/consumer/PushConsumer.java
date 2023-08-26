@@ -41,6 +41,7 @@ public class PushConsumer {
 //        consumer.setMessageModel(MessageModel.BROADCASTING);
         consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
 
+
         //4、设置回调函数 处理消息
 
         consumer.registerMessageListener(new MessageListenerConcurrently() {
