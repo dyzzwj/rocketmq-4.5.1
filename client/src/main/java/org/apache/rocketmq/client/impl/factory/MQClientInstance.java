@@ -451,6 +451,9 @@ public class MQClientInstance {
             }
         }
 
+        /**
+         * 从 nameserver 上获取最新的路由信息并更新
+         */
         for (String topic : topicList) {
             this.updateTopicRouteInfoFromNameServer(topic);
         }
